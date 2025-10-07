@@ -1,12 +1,177 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Chit Chat Web App</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/chit-chat-app.jsx"></script>
-  </body>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chit Chat</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .hidden { display: none; }
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            border-left-color: #fff;
+            animation: spin 1s ease infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+
+    <div id="app-container">
+
+        <!-- ===== Missing Config Screen ===== -->
+        <div id="missing-config-screen" class="hidden">
+            <div class="flex items-center justify-center min-h-screen bg-amber-50 text-amber-900">
+                <div class="w-full max-w-2xl p-8 space-y-6 bg-white rounded-2xl shadow-lg border-2 border-amber-200">
+                    <div class="text-center">
+                        <div class="mx-auto h-12 w-12 text-amber-500">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+                        </div>
+                        <h1 class="text-3xl font-bold mt-4">Configuration Needed</h1>
+                        <p class="text-gray-600 mt-2">This app requires environment variables to connect to Firebase.</p>
+                    </div>
+                    <div class="p-4 bg-gray-50 rounded-lg text-left">
+                        <p class="font-semibold mb-2">1. Go to your project settings on Vercel.</p>
+                        <p class="font-semibold mb-2">2. Navigate to the "Environment Variables" section.</p>
+                        <p class="font-semibold">3. Add the six required variables (e.g., `VITE_API_KEY`, `VITE_AUTH_DOMAIN`, etc.) with their corresponding values from your Firebase project.</p>
+                    </div>
+                     <p class="text-center text-xs text-gray-500">After adding the variables, you must redeploy your project for the changes to apply.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== Auth Screen ===== -->
+        <div id="auth-screen" class="hidden">
+            <div class="flex items-center justify-center min-h-screen bg-pink-50">
+                <div class="w-full max-w-sm p-8 space-y-6 bg-white rounded-2xl shadow-lg">
+                    <div class="text-center">
+                        <h1 class="text-3xl font-bold text-gray-800">Chit Chat</h1>
+                        <p id="auth-title" class="text-gray-500 mt-2">Welcome back!</p>
+                    </div>
+                    <form id="auth-form" class="space-y-4">
+                        <input type="email" id="auth-email" placeholder="Email Address" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-400" required />
+                        <input type="password" id="auth-password" placeholder="Password" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-400" required />
+                        <p id="auth-error" class="text-sm text-red-500"></p>
+                        <button type="submit" id="auth-submit-button" class="w-full bg-pink-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-pink-600 transition flex items-center justify-center">
+                            Log In
+                        </button>
+                    </form>
+                    <p class="text-sm text-center text-gray-600">
+                        <span id="auth-prompt">Don't have an account?</span>
+                        <button id="auth-toggle" class="font-semibold text-pink-500 hover:underline ml-1">Register</button>
+                    </p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- ===== Main App View (Authenticated) ===== -->
+        <div id="main-app" class="font-sans bg-gray-50 min-h-screen pb-20 hidden">
+            <!-- Global Error Message -->
+            <div id="global-error" class="hidden bg-red-100 border-l-4 border-red-500 text-red-700 p-4 m-4 rounded-md" role="alert">
+                <p id="global-error-text"></p>
+                <button id="global-error-close" class="font-bold ml-4">Close</button>
+            </div>
+
+            <!-- Header -->
+            <div id="header" class="p-4 bg-white/80 backdrop-blur-sm sticky top-0 z-10 flex items-center shadow-sm">
+                <button id="header-back-button" class="hidden p-2 rounded-full hover:bg-gray-200 mr-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                </button>
+                <h1 id="header-title" class="text-xl font-bold text-gray-800">Chit Chat</h1>
+            </div>
+            
+            <div id="view-container">
+                <!-- Home Screen -->
+                <div id="home-screen" class="">
+                     <div class="p-6 flex flex-col items-center justify-center text-center min-h-[calc(100vh-140px)]">
+                        <div id="get-topic-view">
+                            <h2 class="text-3xl font-bold text-gray-800 mb-2">Ready to connect?</h2>
+                            <p class="text-gray-500 mb-8">Click the button to get a new conversation starter.</p>
+                            <button id="get-new-topic-btn" class="bg-pink-500 text-white font-bold py-4 px-8 rounded-full shadow-lg hover:bg-pink-600 transition-transform transform hover:scale-105 flex items-center justify-center">
+                                Start a new chat
+                            </button>
+                        </div>
+                        <div id="current-topic-view" class="hidden w-full max-w-md bg-white p-6 rounded-xl shadow-lg">
+                            <span id="topic-category" class="text-sm font-medium text-pink-500 bg-pink-100 px-3 py-1 rounded-full"></span>
+                            <p id="topic-text" class="text-2xl font-semibold text-gray-700 my-4"></p>
+                            <textarea id="topic-note" placeholder="Jot down your thoughts..." class="w-full h-32 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-400 focus:border-transparent transition"></textarea>
+                            <div class="mt-4 flex items-center space-x-2">
+                                <button id="save-chat-btn" class="flex-grow bg-green-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-green-600 transition-transform transform hover:scale-105 flex items-center justify-center">
+                                    Save Chat
+                                </button>
+                                <button id="refresh-topic-btn" title="Get a new topic" class="flex-shrink-0 bg-pink-500 text-white p-3 rounded-lg hover:bg-pink-600 transition-transform transform hover:scale-105 flex items-center justify-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M3 21v-5h5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/></svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- History Screen -->
+                <div id="history-screen" class="hidden p-4">
+                    <div id="history-list" class="space-y-3"></div>
+                    <div id="history-empty" class="text-center mt-20 text-gray-500">
+                        <p>You haven't saved any chats yet.</p>
+                    </div>
+                </div>
+
+                <!-- Settings Screen -->
+                <div id="settings-screen" class="hidden p-6 pb-24">
+                     <div class="mb-8">
+                        <h3 class="text-lg font-semibold text-gray-700 mb-4">Choose AI Topic Categories</h3>
+                        <div id="settings-categories-list" class="space-y-3"></div>
+                    </div>
+                    <div class="mb-8">
+                        <h3 class="text-lg font-semibold text-gray-700 mb-4">Add a Custom Topic</h3>
+                        <p class="text-sm text-gray-500 mb-4">Adding a new category here will also make it available for the AI.</p>
+                        <form id="add-topic-form" class="p-4 bg-white rounded-lg shadow-sm space-y-4">
+                            <input type="text" id="new-topic-text" placeholder="Your new conversation topic" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-400" required />
+                            <input type="text" id="new-topic-category" placeholder="Enter a new or existing category" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-400" required />
+                            <button type="submit" class="w-full bg-pink-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-pink-600 transition flex items-center justify-center">Add Topic</button>
+                        </form>
+                    </div>
+                    <div>
+                        <button id="sign-out-btn" class="w-full bg-red-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-red-600 transition flex items-center justify-center">
+                            Sign Out
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Detail Screen -->
+                <div id="detail-screen" class="hidden p-6">
+                    <div class="bg-white p-6 rounded-xl shadow-lg mb-6">
+                        <span id="detail-category" class="text-sm font-medium text-pink-500 bg-pink-100 px-3 py-1 rounded-full"></span>
+                        <p id="detail-topic" class="text-2xl font-semibold text-gray-700 my-4"></p>
+                        <button id="expand-topic-btn" class="w-full bg-indigo-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-600 transition flex items-center justify-center">Expand on this</button>
+                    </div>
+                    <h3 class="text-lg font-semibold text-gray-700 mb-4">Notes</h3>
+                    <div id="detail-notes-list" class="space-y-3 mb-6"></div>
+                    <div class="mt-4">
+                         <textarea id="detail-new-note" placeholder="Add a new thought..." class="w-full h-24 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-400 focus:border-transparent transition"></textarea>
+                        <button id="add-note-btn" class="mt-2 w-full bg-pink-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-pink-600 transition flex items-center justify-center">Add Note</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Navigation -->
+            <nav id="navigation" class="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-sm border-t border-gray-200 flex justify-around p-2">
+              <button data-view="home" class="nav-button flex flex-col items-center p-2 rounded-lg transition-colors text-pink-500"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg><span class="text-xs mt-1">Chat</span></button>
+              <button data-view="history" class="nav-button flex flex-col items-center p-2 rounded-lg transition-colors text-gray-500 hover:text-pink-400"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg><span class="text-xs mt-1">History</span></button>
+              <button data-view="settings" class="nav-button flex flex-col items-center p-2 rounded-lg transition-colors text-gray-500 hover:text-pink-400"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 0 2l-.15.08a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1 0-2l.15-.08a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg><span class="text-xs mt-1">Settings</span></button>
+            </nav>
+        </div>
+    </div>
+
+    <script type="module" src="/src/script.js"></script>
+</body>
 </html>
