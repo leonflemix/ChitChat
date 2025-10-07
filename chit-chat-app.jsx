@@ -7,12 +7,13 @@ import { ArrowLeft, Settings, MessageSquare, History, Save, Plus, BrainCircuit, 
 // --- Firebase Configuration ---
 // Paste your Firebase config object here from your project's settings.
 const firebaseConfig = {
-  apiKey: "PASTE_YOUR_API_KEY_HERE",
-  authDomain: "PASTE_YOUR_AUTH_DOMAIN_HERE",
-  projectId: "PASTE_YOUR_PROJECT_ID_HERE",
-  storageBucket: "PASTE_YOUR_STORAGE_BUCKET_HERE",
-  messagingSenderId: "PASTE_YOUR_MESSAGING_SENDER_ID_HERE",
-  appId: "PASTE_YOUR_APP_ID_HERE"
+  apiKey: "AIzaSyBIHrZMw4fQP7ghC6VyTCq--61UlWlWEZQ",
+  authDomain: "chitchat-1b6d3.firebaseapp.com",
+  projectId: "chitchat-1b6d3",
+  storageBucket: "chitchat-1b6d3.firebasestorage.app",
+  messagingSenderId: "1075848033593",
+  appId: "1:1075848033593:web:555b1a8eb9ac39efeb24e8",
+  measurementId: "G-KTWCYDN0YF"
 };
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-chit-chat-app';
 
