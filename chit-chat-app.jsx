@@ -10,7 +10,7 @@ const firebaseConfig = {
   apiKey: "AIzaSyBIHrZMw4fQP7ghC6VyTCq--61UlWlWEZQ",
   authDomain: "chitchat-1b6d3.firebaseapp.com",
   projectId: "chitchat-1b6d3",
-  storageBucket: "chitchat-1b6d3.firebasestorage.app",
+  storageBucket: "chitchat-1b6d3.appspot.com",
   messagingSenderId: "1075848033593",
   appId: "1:1075848033593:web:555b1a8eb9ac39efeb24e8",
   measurementId: "G-KTWCYDN0YF"
