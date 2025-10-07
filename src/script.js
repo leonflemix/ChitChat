@@ -22,15 +22,15 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 // --- Firebase Configuration ---
-// This safely reads the configuration from Vercel's environment variables.
-// Vercel's build process will replace these with your actual keys.
+// Paste your Firebase config object here from your project's settings.
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_API_KEY,
-  authDomain: import.meta.env.VITE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_APP_ID
+  apiKey: "AIzaSyBIHrZMw4fQP7ghC6VyTCq--61UlWlWEZQ",
+  authDomain: "chitchat-1b6d3.firebaseapp.com",
+  projectId: "chitchat-1b6d3",
+  storageBucket: "chitchat-1b6d3.firebasestorage.app",
+  messagingSenderId: "1075848033593",
+  appId: "1:1075848033593:web:555b1a8eb9ac39efeb24e8",
+  measurementId: "G-KTWCYDN0YF"
 };
 
 const appId = 'default-chit-chat-app';
@@ -432,8 +432,7 @@ function setupEventListeners() {
 
 // --- App Initialization ---
 document.addEventListener('DOMContentLoaded', () => {
-    // This check now correctly uses the environment variables for deployment.
-    const isConfigMissing = !import.meta.env.VITE_API_KEY;
+    const isConfigMissing = !firebaseConfig.apiKey || firebaseConfig.apiKey.startsWith("PASTE_");
     
     if (isConfigMissing) {
         ui.missingConfigScreen.classList.remove('hidden');
