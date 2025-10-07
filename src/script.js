@@ -22,14 +22,15 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 // --- Firebase Configuration ---
-// This safely reads the configuration from Vercel's environment variables
+// This safely reads the configuration from Vercel's environment variables.
+// Vercel's build process will replace these with your actual keys.
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_API_KEY,
   authDomain: import.meta.env.VITE_AUTH_DOMAIN,
   projectId: import.meta.env.VITE_PROJECT_ID,
   storageBucket: import.meta.env.VITE_STORAGE_BUCKET,
   messagingSenderId: import.meta.env.VITE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_APP_ID,
+  appId: import.meta.env.VITE_APP_ID
 };
 
 const appId = 'default-chit-chat-app';
@@ -431,11 +432,17 @@ function setupEventListeners() {
 
 // --- App Initialization ---
 document.addEventListener('DOMContentLoaded', () => {
-    if (!firebaseConfig.apiKey) {
+    // This check now correctly uses the environment variables for deployment.
+    const isConfigMissing = !import.meta.env.VITE_API_KEY;
+    
+    if (isConfigMissing) {
         ui.missingConfigScreen.classList.remove('hidden');
+        ui.authScreen.classList.add('hidden');
+        ui.mainApp.classList.add('hidden');
         return;
     }
     initializeFirebase();
     setupEventListeners();
     switchView('home');
 });
+
