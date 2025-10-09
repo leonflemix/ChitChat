@@ -22,16 +22,17 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 // --- Firebase Configuration ---
-// Paste your Firebase config object here from your project's settings.
+// This safely reads the configuration from Vercel's environment variables.
+// Vercel's build process will replace these with your actual keys.
 const firebaseConfig = {
-  apiKey: "AIzaSyBIHrZMw4fQP7ghC6VyTCq--61UlWlWEZQ",
-  authDomain: "chitchat-1b6d3.firebaseapp.com",
-  projectId: "chitchat-1b6d3",
-  storageBucket: "chitchat-1b6d3.firebasestorage.app",
-  messagingSenderId: "1075848033593",
-  appId: "1:1075848033593:web:555b1a8eb9ac39efeb24e8",
-  measurementId: "G-KTWCYDN0YF"
+  apiKey: import.meta.env.VITE_API_KEY,
+  authDomain: import.meta.env.VITE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_APP_ID
 };
+
 
 const appId = 'default-chit-chat-app';
 
