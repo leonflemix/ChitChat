@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chit Chat AI Discussion App</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Load Google Fonts (Inter) -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Custom styles and font definitions */
+        :root {
+            --primary-color: #4f46e5;
+            --primary-hover: #4338ca;
+            --background-light: #f9fafb;
+            --card-background: #ffffff;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--background-light);
+            min-height: 100vh;
+        }
+        .container-wrapper {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        .main-card {
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            border-radius: 12px;
+        }
+        .btn-primary {
+            background-color: var(--primary-color);
+            transition: background-color 0.2s;
+        }
+        .btn-primary:hover {
+            background-color: var(--primary-hover);
+        }
+        .area-pill {
+            transition: transform 0.1s, box-shadow 0.1s;
+        }
+        .area-pill:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        .chat-message-ai {
+            background-color: #f3f4f6;
+            border-radius: 12px 12px 12px 4px;
+        }
+        .chat-message-user {
+            background-color: var(--primary-color);
+            color: white;
+            border-radius: 12px 12px 4px 12px;
+        }
+    </style>
+</head>
+<body class="p-4 sm:p-8">
+
+    <div class="container-wrapper">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-gray-800">AI Chit Chat & Notes</h1>
+            <p id="auth-status" class="text-sm text-gray-500 mt-2"></p>
+        </header>
+
+        <div id="loading-indicator" class="hidden text-center p-6 bg-yellow-100 text-yellow-800 rounded-lg main-card" role="status">
+            <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-yellow-700 inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span id="loading-text">Loading...</span>
+        </div>
+
+        <div id="app-container" class="main-card bg-white p-6 md:p-8">
+            <!-- Content will be injected here (Genre Input, Areas, or Discussion) -->
+        </div>
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, onSnapshot, collection, query, setDoc, addDoc, serverTimestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Global variables provided by the Canvas environment
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { /* Mock Config */ };
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        // Set Firebase Log Level
+        setLogLevel('debug');
+
+        // Application State
+        const appState = {
+            db: null,
+            auth: null,
+            userId: null,
+            isAuthReady: false,
+            currentView: 'genreInput', // 'genreInput', 'areaSelection', 'discussion'
+            currentGenre: '',
+            currentAreas: [],
+            currentArea: '',
+            chatHistory: [], // Stores { role: 'user'/'model', parts: [{ text: '...' }] }
+            currentNotes: '',
+            discussionId: null,
+        };
+
+        // DOM Elements
+        const appContainer = document.getElementById('app-container');
+        const loadingIndicator = document.getElementById('loading-indicator');
+        const loadingText = document.getElementById('loading-text');
+        const authStatusElement = document.getElementById('auth-status');
+
+        // ====================================================================
+        // 1. UTILITIES & API CALLS
+        // ====================================================================
+
+        /**
+         * Generic function to call the Gemini API with exponential backoff.
+         * @param {string} prompt - The text prompt for the model.
+         * @param {string} model - The model name.
+         * @param {object} generationConfig - Optional config for structured output.
+         * @param {object[]} history - Optional chat history.
+         * @returns {Promise<any>} The parsed response text or structured data.
+         */
+        async function callGeminiAPI(prompt, systemInstruction, generationConfig = {}, history = []) {
+            loadingIndicator.classList.remove('hidden');
+            loadingText.textContent = `Thinking about your request...`;
+
+            const apiKey = "";
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+
+            // Combine user prompt and chat history
+            const contents = [
+                ...history,
+                { role: "user", parts: [{ text: prompt }] }
+            ];
+
+            const payload = {
+                contents: contents,
+                generationConfig: generationConfig,
+                systemInstruction: { parts: [{ text: systemInstruction }] },
+                tools: [{ "google_search": {} }], // Enable grounding
+            };
+
+            let response = null;
+            let maxRetries = 5;
+            let delay = 1000;
+
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const fetchResponse = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (fetchResponse.status === 429) { // Rate limit error
+                        if (i < maxRetries - 1) {
+                            await new Promise(resolve => setTimeout(resolve, delay));
+                            delay *= 2;
+                            continue;
+                        }
+                    }
+
+                    if (!fetchResponse.ok) {
+                        throw new Error(`API call failed with status: ${fetchResponse.status}`);
+                    }
+
+                    response = await fetchResponse.json();
+                    break; // Success
+                } catch (error) {
+                    console.error("Fetch attempt failed:", error);
+                    if (i < maxRetries - 1) {
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        delay *= 2;
+                        continue;
+                    }
+                    throw new Error("Failed to connect to the Gemini API after multiple retries.");
+                }
+            }
+            loadingIndicator.classList.add('hidden');
+
+            const candidate = response.candidates?.[0];
+            if (!candidate || !candidate.content?.parts?.[0]?.text) {
+                throw new Error("Received empty or malformed response from the AI.");
+            }
+
+            // For structured JSON, the text part contains the JSON string
+            const rawText = candidate.content.parts[0].text;
+            
+            // Return raw text, letting the caller handle JSON parsing if expected
+            return rawText;
+        }
+
+        // ====================================================================
+        // 2. FIREBASE INITIALIZATION & AUTH
+        // ====================================================================
+
+        async function initializeFirebase() {
+            try {
+                const app = initializeApp(firebaseConfig);
+                appState.db = getFirestore(app);
+                appState.auth = getAuth(app);
+
+                // Sign in using the custom token or anonymously
+                if (initialAuthToken) {
+                    await signInWithCustomToken(appState.auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(appState.auth);
+                }
+
+                // Listen for Auth State Change
+                onAuthStateChanged(appState.auth, (user) => {
+                    if (user) {
+                        appState.userId = user.uid;
+                        authStatusElement.innerHTML = `<span class="font-semibold">User ID:</span> ${user.uid} (App: ${appId})`;
+                        appState.isAuthReady = true;
+                        console.log("Firebase Auth Ready. User ID:", appState.userId);
+                        renderApp(); // Initial render after auth
+                    } else {
+                        // This should ideally not happen if signInAnonymously succeeds, 
+                        // but handles the general case.
+                        appState.userId = crypto.randomUUID(); 
+                        appState.isAuthReady = true;
+                        authStatusElement.innerHTML = `<span class="font-semibold text-red-500">Anonymous ID:</span> ${appState.userId} (App: ${appId})`;
+                        console.log("Firebase Auth Ready (Anonymous Fallback). User ID:", appState.userId);
+                        renderApp();
+                    }
+                });
+
+            } catch (error) {
+                console.error("Firebase Initialization Error:", error);
+                authStatusElement.innerHTML = `<span class="font-bold text-red-500">Error:</span> Firebase failed to initialize. Check console.`;
+            }
+        }
+
+        /**
+         * Helper to get the Firestore document reference for notes.
+         */
+        function getNotesDocRef() {
+            if (!appState.db || !appState.userId || !appState.discussionId) return null;
+            // Private path: /artifacts/{appId}/users/{userId}/notes_collection/{discussionId}
+            const path = `artifacts/${appId}/users/${appState.userId}/notes_collection`;
+            return doc(collection(appState.db, path), appState.discussionId);
+        }
+
+        // ====================================================================
+        // 3. FIREBASE FIRESTORE (NOTES)
+        // ====================================================================
+
+        /**
+         * Saves the current notes content to Firestore.
+         */
+        async function saveNote(noteText) {
+            const notesRef = getNotesDocRef();
+            if (!notesRef) {
+                console.error("Cannot save note: Missing DB/User/Discussion ID.");
+                return;
+            }
+            try {
+                await setDoc(notesRef, {
+                    noteContent: noteText,
+                    lastUpdated: serverTimestamp(),
+                    area: appState.currentArea,
+                    genre: appState.currentGenre
+                }, { merge: true });
+                console.log("Note saved successfully.");
+                document.getElementById('save-status').textContent = 'Notes saved!';
+                setTimeout(() => document.getElementById('save-status').textContent = '', 2000);
+            } catch (e) {
+                console.error("Error adding/updating document: ", e);
+                document.getElementById('save-status').textContent = 'Error saving notes.';
+            }
+        }
+
+        /**
+         * Sets up a real-time listener for the current discussion's notes.
+         */
+        function setupNotesListener() {
+            const notesRef = getNotesDocRef();
+            if (!notesRef) return;
+
+            // Stop any existing listener
+            if (appState.unsubscribeNotes) {
+                appState.unsubscribeNotes();
+            }
+
+            appState.unsubscribeNotes = onSnapshot(notesRef, (docSnap) => {
+                const notesTextarea = document.getElementById('notes-textarea');
+                if (docSnap.exists() && notesTextarea) {
+                    appState.currentNotes = docSnap.data().noteContent || '';
+                    notesTextarea.value = appState.currentNotes;
+                    console.log("Notes updated from Firestore.");
+                } else if (notesTextarea) {
+                    appState.currentNotes = '';
+                    notesTextarea.value = '';
+                    console.log("Notes document not found, resetting notes.");
+                }
+            }, (error) => {
+                console.error("Error listening to notes:", error);
+            });
+        }
+
+
+        // ====================================================================
+        // 4. GENERATION LOGIC
+        // ====================================================================
+
+        /**
+         * Generates 10 discussion areas from the provided genre.
+         */
+        async function generateAreas(genre) {
+            appState.currentGenre = genre;
+            try {
+                const systemPrompt = "You are a creative idea generator. Based on the user's genre, generate 10 distinct and specific discussion areas. The output MUST be a JSON array of 10 strings. Only include the JSON content.";
+                const userPrompt = `Generate 10 discussion areas for the genre: "${genre}".`;
+                
+                const generationConfig = {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: "ARRAY",
+                        items: { type: "STRING" }
+                    }
+                };
+
+                const jsonString = await callGeminiAPI(userPrompt, systemPrompt, generationConfig);
+                const areas = JSON.parse(jsonString);
+
+                if (areas && areas.length > 0) {
+                    appState.currentAreas = areas.slice(0, 10);
+                    appState.currentView = 'areaSelection';
+                } else {
+                    throw new Error("AI returned an empty or invalid area list.");
+                }
+            } catch (e) {
+                alertUser(`Error generating areas: ${e.message}`);
+                appState.currentView = 'genreInput'; // Go back to input
+            }
+            renderApp();
+        }
+
+        /**
+         * Generates initial questions/facts and starts the chat history.
+         */
+        async function startDiscussion(area) {
+            appState.currentArea = area;
+            // Discussion ID is based on the selected area and genre to link notes
+            appState.discussionId = `${appState.currentGenre.replace(/\W/g, '_').toLowerCase()}_${area.replace(/\W/g, '_').toLowerCase()}`; 
+
+            try {
+                loadingText.textContent = `Preparing discussion topics for "${area}"...`;
+                const systemPrompt = "You are an excellent discussion facilitator and AI participant. Your first response must be a welcoming message followed by 10 thought-provoking questions or interesting facts about the user's chosen area. After the initial questions, engage in a friendly, concise, and insightful chat, keeping the discussion moving.";
+                const userPrompt = `I have selected the discussion area: "${area}". Please provide the initial 10 questions/facts now.`;
+                
+                const responseText = await callGeminiAPI(userPrompt, systemPrompt);
+                
+                appState.chatHistory = [
+                    { role: 'model', parts: [{ text: responseText }] }
+                ];
+                appState.currentView = 'discussion';
+                setupNotesListener(); // Start listening for notes
+            } catch (e) {
+                alertUser(`Error starting discussion: ${e.message}`);
+                appState.currentView = 'areaSelection'; // Go back to area selection
+            }
+            renderApp();
+        }
+
+        /**
+         * Sends a user message and gets an AI response.
+         */
+        async function sendChatMessage(userMessage) {
+            appState.chatHistory.push({ role: 'user', parts: [{ text: userMessage }] });
+            
+            // Clear input and immediately render to show user's message
+            document.getElementById('chat-input').value = '';
+            renderDiscussionView();
+
+            try {
+                loadingText.textContent = `AI is typing a response...`;
+                const systemPrompt = `You are an excellent discussion facilitator and AI participant for the area: "${appState.currentArea}". Keep your responses concise, insightful, and friendly. Do not repeat previous points.`;
+                const userPrompt = userMessage; // User's message is the prompt
+
+                const responseText = await callGeminiAPI(userPrompt, systemPrompt, {}, appState.chatHistory);
+
+                appState.chatHistory.push({ role: 'model', parts: [{ text: responseText }] });
+            } catch (e) {
+                alertUser(`Error during chat: ${e.message}`);
+                // Remove the last user message if AI failed to respond
+                appState.chatHistory.pop();
+            }
+            renderDiscussionView();
+            // Scroll to the bottom of the chat box
+            document.getElementById('chat-box').scrollTop = document.getElementById('chat-box').scrollHeight;
+        }
+
+        // ====================================================================
+        // 5. VIEW RENDERING FUNCTIONS
+        // ====================================================================
+
+        /**
+         * Renders a generic error or info message to the user.
+         */
+        function alertUser(message) {
+            console.error(message);
+            // Simple DOM-based alert instead of alert()
+            const alertHtml = `
+                <div id="temp-alert" class="fixed top-4 right-4 bg-red-500 text-white p-4 rounded-lg shadow-lg z-50">
+                    ${message}
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', alertHtml);
+            setTimeout(() => {
+                const alertEl = document.getElementById('temp-alert');
+                if (alertEl) alertEl.remove();
+            }, 5000);
+        }
+
+        /**
+         * Renders the Genre Input view.
+         */
+        function renderGenreInputView() {
+            appContainer.innerHTML = `
+                <div class="p-4 sm:p-6 text-center">
+                    <h2 class="text-2xl font-semibold mb-4 text-gray-700">What would you like to discuss?</h2>
+                    <p class="mb-6 text-gray-500">Enter a genre (e.g., 'Space Exploration', '1990s Music', 'Greek Mythology').</p>
+                    <div class="flex flex-col sm:flex-row gap-4 max-w-lg mx-auto">
+                        <input type="text" id="genre-input" placeholder="Enter genre here..." class="flex-grow p-3 border border-gray-300 rounded-lg focus:ring-primary-color focus:border-primary-color" required>
+                        <button id="submit-genre" class="btn-primary text-white p-3 rounded-lg font-semibold shadow-md hover:shadow-lg transition">
+                            Generate Areas
+                        </button>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('submit-genre').addEventListener('click', () => {
+                const genre = document.getElementById('genre-input').value.trim();
+                if (genre) {
+                    generateAreas(genre);
+                }
+            });
+        }
+
+        /**
+         * Renders the Area Selection view.
+         */
+        function renderAreaSelectionView() {
+            appContainer.innerHTML = `
+                <div class="p-4 sm:p-6">
+                    <button id="back-to-genre" class="text-sm text-primary-color hover:underline mb-4 flex items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                        </svg>
+                        Change Genre (${appState.currentGenre})
+                    </button>
+                    <h2 class="text-2xl font-semibold mb-6 text-gray-700">Choose a Discussion Area:</h2>
+                    <div id="area-list" class="flex flex-wrap gap-3">
+                        ${appState.currentAreas.map((area, index) => `
+                            <button data-area="${area}" class="area-pill px-4 py-2 bg-indigo-100 text-primary-color font-medium rounded-full border border-primary-color hover:bg-indigo-200 text-left">
+                                ${area}
+                            </button>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('back-to-genre').addEventListener('click', () => {
+                appState.currentView = 'genreInput';
+                appState.currentAreas = [];
+                renderApp();
+            });
+
+            document.getElementById('area-list').addEventListener('click', (event) => {
+                const button = event.target.closest('button');
+                if (button && button.dataset.area) {
+                    startDiscussion(button.dataset.area);
+                }
+            });
+        }
+
+        /**
+         * Renders the main Discussion and Notes view.
+         */
+        function renderDiscussionView() {
+            appContainer.innerHTML = `
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <!-- Discussion Panel (2/3 width) -->
+                    <div class="lg:col-span-2 flex flex-col h-[600px] border border-gray-200 rounded-lg overflow-hidden">
+                        <div class="p-4 bg-gray-50 border-b border-gray-200">
+                            <button id="back-to-areas" class="text-sm text-primary-color hover:underline flex items-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                                </svg>
+                                Back to Areas
+                            </button>
+                            <h3 class="text-xl font-bold text-gray-800 truncate mt-1">${appState.currentArea}</h3>
+                        </div>
+
+                        <!-- Chat Box -->
+                        <div id="chat-box" class="flex-grow p-4 space-y-4 overflow-y-auto">
+                            ${appState.chatHistory.map(msg => `
+                                <div class="flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}">
+                                    <div class="${msg.role === 'user' ? 'chat-message-user' : 'chat-message-ai'} max-w-xl p-3 shadow">
+                                        <p class="text-sm">${msg.role === 'model' ? '<span class="font-bold">AI:</span> ' : ''}${markdownToHtml(msg.parts[0].text)}</p>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+
+                        <!-- Chat Input -->
+                        <div class="p-4 border-t border-gray-200 bg-white">
+                            <div class="flex gap-2">
+                                <input type="text" id="chat-input" placeholder="Type your message..." class="flex-grow p-3 border border-gray-300 rounded-lg focus:ring-primary-color focus:border-primary-color" autofocus>
+                                <button id="send-chat" class="btn-primary text-white p-3 rounded-lg font-semibold shadow-md hover:shadow-lg transition">
+                                    Send
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Notes Panel (1/3 width) -->
+                    <div class="lg:col-span-1 flex flex-col h-[600px]">
+                        <div class="bg-card-background p-4 border border-gray-200 rounded-lg flex flex-col flex-grow">
+                            <h3 class="text-xl font-bold mb-3 text-gray-700">My Notes & Comments</h3>
+                            <textarea id="notes-textarea" class="flex-grow p-3 border border-gray-300 rounded-lg resize-none focus:ring-primary-color focus:border-primary-color text-sm" placeholder="Write your thoughts, summaries, or points of interest here...">${appState.currentNotes}</textarea>
+                            <div class="flex justify-between items-center mt-3">
+                                <button id="save-notes" class="btn-primary text-white px-4 py-2 rounded-lg font-semibold shadow-md hover:shadow-lg transition text-sm">
+                                    Save Notes
+                                </button>
+                                <span id="save-status" class="text-xs text-green-600 font-medium"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Function to handle basic Markdown to HTML conversion for display
+            function markdownToHtml(text) {
+                // Simple bold
+                text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                // Simple italic
+                text = text.replace(/\*(.*?)\*/g, '<em>$1</em>');
+                // Line breaks
+                text = text.replace(/\n/g, '<br>');
+                return text;
+            }
+
+            // Event Listeners
+            document.getElementById('back-to-areas').addEventListener('click', () => {
+                appState.currentView = 'areaSelection';
+                if (appState.unsubscribeNotes) appState.unsubscribeNotes(); // Clean up listener
+                renderApp();
+            });
+
+            const sendChatButton = document.getElementById('send-chat');
+            const chatInput = document.getElementById('chat-input');
+            const saveNotesButton = document.getElementById('save-notes');
+            const notesTextarea = document.getElementById('notes-textarea');
+
+            const handleSend = () => {
+                const message = chatInput.value.trim();
+                if (message) {
+                    sendChatMessage(message);
+                }
+            };
+
+            sendChatButton.addEventListener('click', handleSend);
+            chatInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend();
+                }
+            });
+
+            saveNotesButton.addEventListener('click', () => {
+                saveNote(notesTextarea.value);
+            });
+            
+            // Scroll to bottom when view is rendered
+            const chatBox = document.getElementById('chat-box');
+            if (chatBox) {
+                chatBox.scrollTop = chatBox.scrollHeight;
+            }
+        }
+
+        /**
+         * Main function to render the correct view based on application state.
+         */
+        function renderApp() {
+            if (!appState.isAuthReady) {
+                appContainer.innerHTML = '<div class="p-6 text-center text-lg text-gray-600">Initializing Authentication...</div>';
+                return;
+            }
+
+            switch (appState.currentView) {
+                case 'genreInput':
+                    renderGenreInputView();
+                    break;
+                case 'areaSelection':
+                    renderAreaSelectionView();
+                    break;
+                case 'discussion':
+                    renderDiscussionView();
+                    break;
+                default:
+                    renderGenreInputView();
+            }
+        }
+
+        // ====================================================================
+        // 6. STARTUP
+        // ====================================================================
+
+        // Start Firebase initialization when the script runs
+        initializeFirebase();
+
+    </script>
+
+</body>
+</html>
