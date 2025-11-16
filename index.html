@@ -58,7 +58,7 @@
 
     <div class="container-wrapper">
         <header class="text-center mb-8">
-            <h1 class="text-4xl font-bold text-gray-800">AI Chit Chat & Notes</h1>
+            <h1 class="4xl font-bold text-gray-800">AI Chit Chat & Notes</h1>
             <p id="auth-status" class="text-sm text-gray-500 mt-2"></p>
         </header>
 
@@ -83,7 +83,18 @@
 
         // Global variables provided by the Canvas environment
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { /* Mock Config */ };
+        
+        // The user's provided configuration is used as a fallback if the environment variable is not present.
+        const defaultFirebaseConfig = {
+            apiKey: "AIzaSyA4ynU2vU6pflZ5wRhD-FxDTh3_cQGiePM",
+            authDomain: "chitchat-9264b.firebaseapp.com",
+            projectId: "chitchat-9264b",
+            storageBucket: "chitchat-9264b.firebasestorage.app",
+            messagingSenderId: "233484387798",
+            appId: "1:233484387798:web:eb47053333c2e719359077",
+            measurementId: "G-31QHY1SD1F"
+        };
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : defaultFirebaseConfig;
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
         // Set Firebase Log Level
@@ -126,7 +137,10 @@
             loadingIndicator.classList.remove('hidden');
             loadingText.textContent = `Thinking about your request...`;
 
-            const apiKey = "";
+            // Note: In the Canvas environment, the API key is handled automatically when set to "".
+            // For Vercel deployment of a static client-side app, this key would be public, 
+            // or you would need a backend proxy function (recommended).
+            const apiKey = ""; 
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
 
             // Combine user prompt and chat history
