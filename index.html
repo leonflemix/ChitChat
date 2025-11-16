@@ -62,6 +62,15 @@
             <p id="auth-status" class="text-sm text-gray-500 mt-2"></p>
         </header>
 
+        <!-- API Key Warning/Input -->
+        <div id="api-key-setup" class="bg-red-50 border border-red-200 p-4 rounded-lg mb-6">
+            <p class="font-semibold text-red-700">⚠️ API Key Required</p>
+            <p class="text-sm text-red-600 mb-2">To enable AI functionality, please enter your Gemini API Key below.</p>
+            <input type="text" id="gemini-api-key-input" placeholder="Paste your Gemini API Key here..." class="w-full p-2 border border-red-300 rounded-lg text-sm">
+            <button id="save-api-key" class="mt-2 w-full bg-red-600 text-white p-2 rounded-lg text-sm hover:bg-red-700 transition">Save Key & Reload App</button>
+        </div>
+
+
         <div id="loading-indicator" class="hidden text-center p-6 bg-yellow-100 text-yellow-800 rounded-lg main-card" role="status">
             <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-yellow-700 inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -80,6 +89,14 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, onSnapshot, collection, query, setDoc, addDoc, serverTimestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // ====================================================================
+        // CONFIGURATION AND GLOBALS
+        // ====================================================================
+
+        // Gemini API Key is stored client-side for immediate functionality.
+        // It is RECOMMENDED to use a secure backend proxy in a real deployment.
+        let GEMINI_API_KEY = localStorage.getItem('geminiApiKey') || "";
 
         // Global variables provided by the Canvas environment
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
@@ -120,6 +137,7 @@
         const loadingIndicator = document.getElementById('loading-indicator');
         const loadingText = document.getElementById('loading-text');
         const authStatusElement = document.getElementById('auth-status');
+        const apiKeySetupElement = document.getElementById('api-key-setup');
 
         // ====================================================================
         // 1. UTILITIES & API CALLS
@@ -127,21 +145,19 @@
 
         /**
          * Generic function to call the Gemini API with exponential backoff.
-         * @param {string} prompt - The text prompt for the model.
-         * @param {string} model - The model name.
-         * @param {object} generationConfig - Optional config for structured output.
-         * @param {object[]} history - Optional chat history.
-         * @returns {Promise<any>} The parsed response text or structured data.
          */
         async function callGeminiAPI(prompt, systemInstruction, generationConfig = {}, history = []) {
+            if (!GEMINI_API_KEY) {
+                alertUser("Gemini API Key is missing. Please enter it in the setup box.");
+                apiKeySetupElement.classList.remove('hidden');
+                throw new Error("API Key missing.");
+            }
+
             loadingIndicator.classList.remove('hidden');
             loadingText.textContent = `Thinking about your request...`;
 
-            // Note: In the Canvas environment, the API key is handled automatically when set to "".
-            // For Vercel deployment of a static client-side app, this key would be public, 
-            // or you would need a backend proxy function (recommended).
-            const apiKey = ""; 
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+            // Use the globally available GEMINI_API_KEY
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${GEMINI_API_KEY}`;
 
             // Combine user prompt and chat history
             const contents = [
@@ -177,6 +193,10 @@
                     }
 
                     if (!fetchResponse.ok) {
+                        // Crucially, check for 403 Forbidden here
+                        if (fetchResponse.status === 403) {
+                            throw new Error("API call failed: 403 Forbidden. Check your API Key's validity and permissions.");
+                        }
                         throw new Error(`API call failed with status: ${fetchResponse.status}`);
                     }
 
@@ -189,7 +209,7 @@
                         delay *= 2;
                         continue;
                     }
-                    throw new Error("Failed to connect to the Gemini API after multiple retries.");
+                    throw new Error(error.message || "Failed to connect to the Gemini API after multiple retries.");
                 }
             }
             loadingIndicator.classList.add('hidden');
@@ -434,20 +454,28 @@
          * Renders the Genre Input view.
          */
         function renderGenreInputView() {
+            // Hide/Show API setup based on key presence
+            if (GEMINI_API_KEY) {
+                apiKeySetupElement.classList.add('hidden');
+            } else {
+                apiKeySetupElement.classList.remove('hidden');
+            }
+
             appContainer.innerHTML = `
                 <div class="p-4 sm:p-6 text-center">
                     <h2 class="text-2xl font-semibold mb-4 text-gray-700">What would you like to discuss?</h2>
                     <p class="mb-6 text-gray-500">Enter a genre (e.g., 'Space Exploration', '1990s Music', 'Greek Mythology').</p>
                     <div class="flex flex-col sm:flex-row gap-4 max-w-lg mx-auto">
                         <input type="text" id="genre-input" placeholder="Enter genre here..." class="flex-grow p-3 border border-gray-300 rounded-lg focus:ring-primary-color focus:border-primary-color" required>
-                        <button id="submit-genre" class="btn-primary text-white p-3 rounded-lg font-semibold shadow-md hover:shadow-lg transition">
+                        <button id="submit-genre" class="btn-primary text-white p-3 rounded-lg font-semibold shadow-md hover:shadow-lg transition" ${!GEMINI_API_KEY ? 'disabled' : ''}>
                             Generate Areas
                         </button>
                     </div>
+                    ${!GEMINI_API_KEY ? '<p class="text-sm text-red-500 mt-3">Please save a Gemini API Key above to enable generation.</p>' : ''}
                 </div>
             `;
 
-            document.getElementById('submit-genre').addEventListener('click', () => {
+            document.getElementById('submit-genre')?.addEventListener('click', () => {
                 const genre = document.getElementById('genre-input').value.trim();
                 if (genre) {
                     generateAreas(genre);
@@ -622,8 +650,25 @@
         }
 
         // ====================================================================
-        // 6. STARTUP
+        // 6. STARTUP & API KEY HANDLER
         // ====================================================================
+
+        document.getElementById('save-api-key').addEventListener('click', () => {
+            const input = document.getElementById('gemini-api-key-input');
+            const key = input.value.trim();
+            if (key) {
+                localStorage.setItem('geminiApiKey', key);
+                GEMINI_API_KEY = key;
+                // Reload the app to initialize the view with the key
+                renderApp(); 
+            } else {
+                alertUser("Please enter a valid API key.");
+            }
+        });
+
+        // Initialize the input field with any saved key
+        document.getElementById('gemini-api-key-input').value = GEMINI_API_KEY;
+
 
         // Start Firebase initialization when the script runs
         initializeFirebase();
