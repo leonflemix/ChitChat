@@ -88,7 +88,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, onSnapshot, collection, query, setDoc, addDoc, serverTimestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, onSnapshot, collection, query, setDoc, getDoc, serverTimestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // ====================================================================
         // CONFIGURATION AND GLOBALS
@@ -277,7 +277,7 @@
         }
 
         /**
-         * Helper to get the Firestore document reference for notes.
+         * Helper to get the Firestore document reference for notes and discussion state.
          */
         function getNotesDocRef() {
             if (!appState.db || !appState.userId || !appState.discussionId) return null;
@@ -287,11 +287,11 @@
         }
 
         // ====================================================================
-        // 3. FIREBASE FIRESTORE (NOTES)
+        // 3. FIREBASE FIRESTORE (NOTES & HISTORY)
         // ====================================================================
 
         /**
-         * Saves the current notes content to Firestore.
+         * Saves the current notes content AND the entire chat history to Firestore.
          */
         async function saveNote(noteText) {
             const notesRef = getNotesDocRef();
@@ -300,17 +300,21 @@
                 return;
             }
             try {
+                // FIX: Add chatHistory to the document
                 await setDoc(notesRef, {
                     noteContent: noteText,
+                    chatHistory: appState.chatHistory, // Save the entire chat history
                     lastUpdated: serverTimestamp(),
                     area: appState.currentArea,
                     genre: appState.currentGenre
                 }, { merge: true });
-                console.log("Note saved successfully.");
-                document.getElementById('save-status').textContent = 'Notes saved!';
+                console.log("Discussion state and notes saved successfully.");
+                document.getElementById('save-status').textContent = 'Notes & Chat saved!';
                 setTimeout(() => document.getElementById('save-status').textContent = '', 2000);
             } catch (e) {
                 console.error("Error adding/updating document: ", e);
+                // Inform user to check security rules
+                alertUser("Error saving notes. Please check your Firestore Security Rules and ensure Anonymous/Authenticated writes are allowed on your path.");
                 document.getElementById('save-status').textContent = 'Error saving notes.';
             }
         }
@@ -330,10 +334,12 @@
             appState.unsubscribeNotes = onSnapshot(notesRef, (docSnap) => {
                 const notesTextarea = document.getElementById('notes-textarea');
                 if (docSnap.exists() && notesTextarea) {
+                    // Only update notes content from Firestore in the listener (Chat is loaded in startDiscussion)
                     appState.currentNotes = docSnap.data().noteContent || '';
                     notesTextarea.value = appState.currentNotes;
                     console.log("Notes updated from Firestore.");
                 } else if (notesTextarea) {
+                    // If document is deleted or doesn't exist yet, reset notes
                     appState.currentNotes = '';
                     notesTextarea.value = '';
                     console.log("Notes document not found, resetting notes.");
@@ -369,7 +375,6 @@
                 
                 // Clean up potential non-JSON wrapper text before parsing
                 let cleanJsonString = jsonString.trim();
-                // Sometimes models wrap JSON in ```json...```
                 if (cleanJsonString.startsWith('```json')) {
                     cleanJsonString = cleanJsonString.substring(7, cleanJsonString.lastIndexOf('```')).trim();
                 } else if (cleanJsonString.startsWith('```')) {
@@ -399,19 +404,35 @@
             // Discussion ID is based on the selected area and genre to link notes
             appState.discussionId = `${appState.currentGenre.replace(/\W/g, '_').toLowerCase()}_${area.replace(/\W/g, '_').toLowerCase()}`; 
 
+            const notesRef = getNotesDocRef();
+
             try {
-                loadingText.textContent = `Preparing discussion topics for "${area}"...`;
-                // NOTE: This call does NOT use responseMimeType, so it will use the Google Search tool.
-                const systemPrompt = "You are an excellent discussion facilitator and AI participant. Your first response must be a welcoming message followed by 10 thought-provoking questions or interesting facts about the user's chosen area. After the initial questions, engage in a friendly, concise, and insightful chat, keeping the discussion moving.";
-                const userPrompt = `I have selected the discussion area: "${area}". Please provide the initial 10 questions/facts now.`;
+                loadingText.textContent = `Loading discussion for "${area}"...`;
                 
-                const responseText = await callGeminiAPI(userPrompt, systemPrompt);
+                // 1. Check if discussion already exists (for resuming chat)
+                const docSnap = await getDoc(notesRef);
                 
-                appState.chatHistory = [
-                    { role: 'model', parts: [{ text: responseText }] }
-                ];
+                if (docSnap.exists() && docSnap.data().chatHistory) {
+                    // Existing discussion found: load saved state
+                    const data = docSnap.data();
+                    appState.chatHistory = data.chatHistory || [];
+                    console.log("Loaded existing discussion state.");
+
+                } else {
+                    // New discussion: generate initial questions
+                    loadingText.textContent = `Preparing new discussion topics for "${area}"...`;
+                    const systemPrompt = "You are an excellent discussion facilitator and AI participant. Your first response must be a welcoming message followed by 10 thought-provoking questions or interesting facts about the user's chosen area. After the initial questions, engage in a friendly, concise, and insightful chat, keeping the discussion moving.";
+                    const userPrompt = `I have selected the discussion area: "${area}". Please provide the initial 10 questions/facts now.`;
+                    
+                    const responseText = await callGeminiAPI(userPrompt, systemPrompt);
+                    
+                    appState.chatHistory = [
+                        { role: 'model', parts: [{ text: responseText }] }
+                    ];
+                }
+                
                 appState.currentView = 'discussion';
-                setupNotesListener(); // Start listening for notes
+                setupNotesListener(); // Start listening for notes (will load initial notes content)
             } catch (e) {
                 alertUser(`Error starting discussion: ${e.message}`);
                 appState.currentView = 'areaSelection'; // Go back to area selection
@@ -435,7 +456,7 @@
                 const systemPrompt = `You are an excellent discussion facilitator and AI participant for the area: "${appState.currentArea}". Keep your responses concise, insightful, and friendly. Do not repeat previous points.`;
                 const userPrompt = userMessage; // User's message is the prompt
 
-                const responseText = await callGeminiAPI(userPrompt, systemPrompt, {}, appState.chatHistory);
+                const responseText = await callGeminiAPI(userPrompt, systemInstruction, {}, appState.chatHistory);
 
                 appState.chatHistory.push({ role: 'model', parts: [{ text: responseText }] });
             } catch (e) {
