@@ -169,8 +169,13 @@
                 contents: contents,
                 generationConfig: generationConfig,
                 systemInstruction: { parts: [{ text: systemInstruction }] },
-                tools: [{ "google_search": {} }], // Enable grounding
             };
+
+            // FIX: Conditionally include tools. Tools (like Google Search) are unsupported
+            // when requesting structured output (responseMimeType is set).
+            if (!generationConfig.responseMimeType) {
+                payload.tools = [{ "google_search": {} }];
+            }
 
             let response = null;
             let maxRetries = 5;
@@ -361,7 +366,17 @@
                 };
 
                 const jsonString = await callGeminiAPI(userPrompt, systemPrompt, generationConfig);
-                const areas = JSON.parse(jsonString);
+                
+                // Clean up potential non-JSON wrapper text before parsing
+                let cleanJsonString = jsonString.trim();
+                // Sometimes models wrap JSON in ```json...```
+                if (cleanJsonString.startsWith('```json')) {
+                    cleanJsonString = cleanJsonString.substring(7, cleanJsonString.lastIndexOf('```')).trim();
+                } else if (cleanJsonString.startsWith('```')) {
+                     cleanJsonString = cleanJsonString.substring(3, cleanJsonString.lastIndexOf('```')).trim();
+                }
+
+                const areas = JSON.parse(cleanJsonString);
 
                 if (areas && areas.length > 0) {
                     appState.currentAreas = areas.slice(0, 10);
@@ -370,7 +385,7 @@
                     throw new Error("AI returned an empty or invalid area list.");
                 }
             } catch (e) {
-                alertUser(`Error generating areas: ${e.message}`);
+                alertUser(`Error generating areas. Check if your API Key is valid and has proper billing enabled: ${e.message}`);
                 appState.currentView = 'genreInput'; // Go back to input
             }
             renderApp();
@@ -386,6 +401,7 @@
 
             try {
                 loadingText.textContent = `Preparing discussion topics for "${area}"...`;
+                // NOTE: This call does NOT use responseMimeType, so it will use the Google Search tool.
                 const systemPrompt = "You are an excellent discussion facilitator and AI participant. Your first response must be a welcoming message followed by 10 thought-provoking questions or interesting facts about the user's chosen area. After the initial questions, engage in a friendly, concise, and insightful chat, keeping the discussion moving.";
                 const userPrompt = `I have selected the discussion area: "${area}". Please provide the initial 10 questions/facts now.`;
                 
@@ -415,6 +431,7 @@
 
             try {
                 loadingText.textContent = `AI is typing a response...`;
+                // NOTE: This call does NOT use responseMimeType, so it will use the Google Search tool.
                 const systemPrompt = `You are an excellent discussion facilitator and AI participant for the area: "${appState.currentArea}". Keep your responses concise, insightful, and friendly. Do not repeat previous points.`;
                 const userPrompt = userMessage; // User's message is the prompt
 
@@ -546,7 +563,7 @@
                             ${appState.chatHistory.map(msg => `
                                 <div class="flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}">
                                     <div class="${msg.role === 'user' ? 'chat-message-user' : 'chat-message-ai'} max-w-xl p-3 shadow">
-                                        <p class="text-sm">${msg.role === 'model' ? '<span class="font-bold">AI:</span> ' : ''}${markdownToHtml(msg.parts[0].text)}</p>
+                                        <p class="text-sm">${markdownToHtml(msg.parts[0].text, msg.role)}</p>
                                     </div>
                                 </div>
                             `).join('')}
@@ -580,14 +597,21 @@
             `;
 
             // Function to handle basic Markdown to HTML conversion for display
-            function markdownToHtml(text) {
+            function markdownToHtml(text, role) {
+                let html = text;
+                
+                // Add AI prefix if it's a model response
+                if (role === 'model') {
+                    html = `<span class="font-bold">AI:</span> ${html}`;
+                }
+
                 // Simple bold
-                text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
                 // Simple italic
-                text = text.replace(/\*(.*?)\*/g, '<em>$1</em>');
+                html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
                 // Line breaks
-                text = text.replace(/\n/g, '<br>');
-                return text;
+                html = html.replace(/\n/g, '<br>');
+                return html;
             }
 
             // Event Listeners
