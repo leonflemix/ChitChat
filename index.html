@@ -64,8 +64,8 @@
 
         <!-- API Key Warning/Input -->
         <div id="api-key-setup" class="bg-red-50 border border-red-200 p-4 rounded-lg mb-6">
-            <p class="font-semibold text-red-700">⚠️ API Key Required</p>
-            <p class="text-sm text-red-600 mb-2">To enable AI functionality, please enter your Gemini API Key below.</p>
+            <p class="font-semibold text-red-700">⚠️ Gemini API Key Required</p>
+            <p class="text-sm text-red-600 mb-2">The AI features require a dedicated **Gemini API Key**. (Your existing Firebase key will not work here).</p>
             <input type="text" id="gemini-api-key-input" placeholder="Paste your Gemini API Key here..." class="w-full p-2 border border-red-300 rounded-lg text-sm">
             <button id="save-api-key" class="mt-2 w-full bg-red-600 text-white p-2 rounded-lg text-sm hover:bg-red-700 transition">Save Key & Reload App</button>
         </div>
@@ -193,9 +193,12 @@
                     }
 
                     if (!fetchResponse.ok) {
-                        // Crucially, check for 403 Forbidden here
-                        if (fetchResponse.status === 403) {
-                            throw new Error("API call failed: 403 Forbidden. Check your API Key's validity and permissions.");
+                        // Crucially, check for 403 Forbidden or 400 Bad Request here
+                        const errorMsg = await fetchResponse.text();
+                        console.error("API Detailed Error:", errorMsg);
+                        
+                        if (fetchResponse.status === 403 || fetchResponse.status === 400) {
+                            throw new Error(`API call failed: ${fetchResponse.status}. This usually indicates an invalid, expired, or incorrect type of API Key (e.g., using a Firebase key instead of a Gemini Key).`);
                         }
                         throw new Error(`API call failed with status: ${fetchResponse.status}`);
                     }
