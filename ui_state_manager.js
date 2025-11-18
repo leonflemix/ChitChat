@@ -99,32 +99,28 @@ function markdownToHtml(text, role) {
  * Renders the Login / Welcome view and starts the FirebaseUI widget.
  */
 export function renderLoginView() {
-    // Dynamically import Firebase UI instance
-    import('https://www.gstatic.com/firebasejs/ui/6.0.1/firebase-ui-auth.js')
-        .then(module => {
-            if (!module.ui) {
-                // firebaseui.auth.AuthUI is available globally after import
-                module.ui = new firebaseui.auth.AuthUI(appState.auth); 
-            }
-            
-            appContainer.innerHTML = `
-                <div class="p-6 text-center">
-                    <h2 class="text-2xl font-semibold mb-4 text-gray-700">Sign In to Continue</h2>
-                    <p class="mb-6 text-gray-500">Your discussions and notes are securely tied to your user account.</p>
-                    <div id="firebaseui-auth-container" class="max-w-md mx-auto"></div>
-                </div>
-            `;
-            
-            // Start the Firebase UI Widget
-            module.ui.start('#firebaseui-auth-container', uiConfig);
-            
-            // Hide the API key setup area if user is asked to sign in
-            document.getElementById('api-key-setup').classList.add('hidden');
-        })
-        .catch(error => {
-            console.error("Failed to load Firebase UI module:", error);
-            appContainer.innerHTML = `<div class="p-6 text-center text-red-500">Error loading sign-in interface. Check console.</div>`;
-        });
+    // Check if FirebaseUI is ready (the global window.firebaseui should exist)
+    if (typeof firebaseui === 'undefined' || typeof firebaseui.auth === 'undefined' || !appState.auth) {
+        console.warn("Firebase or FirebaseUI not fully loaded. Rendering temporary message.");
+        appContainer.innerHTML = `<div class="p-6 text-center text-lg text-gray-600">Loading sign-in components...</div>`;
+        return;
+    }
+    
+    let ui = firebaseui.auth.AuthUI.getInstance() || new firebaseui.auth.AuthUI(appState.auth);
+    
+    appContainer.innerHTML = `
+        <div class="p-6 text-center">
+            <h2 class="text-2xl font-semibold mb-4 text-gray-700">Sign In to Continue</h2>
+            <p class="mb-6 text-gray-500">Your discussions and notes are securely tied to your user account.</p>
+            <div id="firebaseui-auth-container" class="max-w-md mx-auto"></div>
+        </div>
+    `;
+    
+    // Start the Firebase UI Widget
+    ui.start('#firebaseui-auth-container', uiConfig);
+    
+    // Hide the API key setup area if user is asked to sign in
+    document.getElementById('api-key-setup').classList.add('hidden');
 }
 
 /**
@@ -169,7 +165,7 @@ export function renderGenreInputView() {
                     </div>
                 `).join('')
                 : 
-                '<p class="text-gray-500 italic">No past discussions found. Start a new one above!</p>'
+                '<p class="text-gray-500 italic">No past discussions found. Sign in and start a new one!</p>'
             }
             </div>
         </section>
