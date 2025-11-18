@@ -1,6 +1,6 @@
 // Filename: ui_state_manager.js (State Management and View Rendering)
 
-import { fetchRecentDiscussions, saveNote, deleteDiscussion } from "./firebase_service.js"; // setupNotesListener removed
+import { fetchRecentDiscussions, saveNote, deleteDiscussion, uiConfig } from "./firebase_service.js"; 
 import { startDiscussion, sendChatMessage, generateSuggestions } from "./ai_service.js";
 
 // --- Application State ---
@@ -9,7 +9,7 @@ export const appState = {
     auth: null,
     userId: null,
     isAuthReady: false,
-    currentView: 'genreInput',
+    currentView: 'login', // Default starting view is now 'login'
     currentGenre: '',
     currentArea: '',
     chatHistory: [],
@@ -94,6 +94,38 @@ function markdownToHtml(text, role) {
 }
 
 // --- View Renderers ---
+
+/**
+ * Renders the Login / Welcome view and starts the FirebaseUI widget.
+ */
+export function renderLoginView() {
+    // Dynamically import Firebase UI instance
+    import('https://www.gstatic.com/firebasejs/ui/6.0.1/firebase-ui-auth.js')
+        .then(module => {
+            if (!module.ui) {
+                // firebaseui.auth.AuthUI is available globally after import
+                module.ui = new firebaseui.auth.AuthUI(appState.auth); 
+            }
+            
+            appContainer.innerHTML = `
+                <div class="p-6 text-center">
+                    <h2 class="text-2xl font-semibold mb-4 text-gray-700">Sign In to Continue</h2>
+                    <p class="mb-6 text-gray-500">Your discussions and notes are securely tied to your user account.</p>
+                    <div id="firebaseui-auth-container" class="max-w-md mx-auto"></div>
+                </div>
+            `;
+            
+            // Start the Firebase UI Widget
+            module.ui.start('#firebaseui-auth-container', uiConfig);
+            
+            // Hide the API key setup area if user is asked to sign in
+            document.getElementById('api-key-setup').classList.add('hidden');
+        })
+        .catch(error => {
+            console.error("Failed to load Firebase UI module:", error);
+            appContainer.innerHTML = `<div class="p-6 text-center text-red-500">Error loading sign-in interface. Check console.</div>`;
+        });
+}
 
 /**
  * Renders the Genre Input view, including recent discussions.
@@ -296,6 +328,9 @@ export function renderApp() {
     }
 
     switch (appState.currentView) {
+        case 'login':
+            renderLoginView();
+            break; 
         case 'genreInput':
             renderGenreInputView();
             break;
@@ -303,6 +338,6 @@ export function renderApp() {
             renderDiscussionView();
             break;
         default:
-            renderGenreInputView();
+            renderLoginView(); 
     }
 }

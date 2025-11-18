@@ -1,19 +1,19 @@
 // Filename: firebase_service.js (Firebase Initialization and Data Layer)
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut, GoogleAuthProvider, EmailAuthProvider } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 import { getFirestore, doc, onSnapshot, collection, query, setDoc, getDoc, getDocs, limit, deleteDoc, serverTimestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-import { alertUser, confirmAction, renderApp } from "./ui_state_manager.js"; // Import UI functions
+import { alertUser, confirmAction, renderApp, renderLoginView } from "./ui_state_manager.js"; // Import UI functions
 
 // Set Firebase Log Level
 setLogLevel('debug');
 
 // --- Firebase Configuration ---
 
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+export const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
 // The user's provided configuration is used as a fallback if the environment variable is not present.
-const defaultFirebaseConfig = {
+export const defaultFirebaseConfig = {
     apiKey: "AIzaSyA4ynU2vU6pflZ5wRhD-FxDTh3_cQGiePM",
     authDomain: "chitchat-9264b.firebaseapp.com",
     projectId: "chitchat-9264b",
@@ -25,6 +25,19 @@ const defaultFirebaseConfig = {
 const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : defaultFirebaseConfig;
 const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
+// --- Firebase UI Configuration (Exported for ui_state_manager.js) ---
+export const uiConfig = {
+    // Only allow Google and Email/Password Sign-in
+    signInFlow: 'popup', 
+    signInOptions: [
+        GoogleAuthProvider.PROVIDER_ID,
+        EmailAuthProvider.PROVIDER_ID,
+    ],
+    // Do not redirect after sign-in, manage state change locally
+    callbacks: {
+        signInSuccessWithAuthResult: () => false, 
+    },
+};
 
 /**
  * Initializes Firebase, sets up authentication, and updates the application state.
@@ -36,41 +49,37 @@ export async function initializeFirebase(appState) {
         appState.db = getFirestore(app);
         appState.auth = getAuth(app);
 
-        // Sign in using the custom token or anonymously
+        // Attempt anonymous or custom token sign-in if available (Legacy/Canvas requirement)
         if (initialAuthToken) {
             try { 
                 await signInWithCustomToken(appState.auth, initialAuthToken);
             } catch (e) {
-                if (e.code === 'auth/admin-restricted-operation' || e.code === 'auth/custom-token-mismatch') {
-                    console.warn("Custom token sign-in failed. Falling back to anonymous sign-in. Ensure Anonymous Auth is enabled in Firebase Console.");
-                    await signInAnonymously(appState.auth);
-                } else {
-                    throw e; // Re-throw other critical errors
-                }
+                console.warn("Custom token sign-in failed. Proceeding with Auth Listener.");
             }
-        } else {
-            await signInAnonymously(appState.auth);
         }
         
-
-        // Listen for Auth State Change
+        // Listener must be set up AFTER initialization
         onAuthStateChanged(appState.auth, (user) => {
-            if (user) {
+            if (user && !user.isAnonymous) { // NEW: Check for non-anonymous user
                 appState.userId = user.uid;
-                authStatusElement.innerHTML = `<span class="font-semibold">User ID:</span> ${user.uid} (App: ${appId})`;
                 appState.isAuthReady = true;
-                console.log("Firebase Auth Ready. User ID:", appState.userId);
+                authStatusElement.innerHTML = `<span class="font-semibold">User:</span> ${user.email || user.displayName || user.uid} <button id="signout-btn" class="text-indigo-400 hover:text-indigo-600 ml-2">Sign Out</button>`;
                 
+                // Fetch recent discussions and render the app view
                 fetchRecentDiscussions(appState); 
-                renderApp();
-            } else {
-                appState.userId = crypto.randomUUID(); 
-                appState.isAuthReady = true;
-                authStatusElement.innerHTML = `<span class="font-semibold text-red-500">Anonymous ID:</span> ${appState.userId} (App: ${appId})`;
-                console.log("Firebase Auth Ready (Anonymous Fallback). User ID:", appState.userId);
+                renderApp(); 
                 
-                fetchRecentDiscussions(appState);
-                renderApp();
+                // Set up sign out listener
+                document.getElementById('signout-btn').addEventListener('click', async () => {
+                    await signOut(appState.auth);
+                    // State change will trigger onAuthStateChanged again
+                });
+            } else {
+                // If no user or anonymous user, show the login view
+                appState.userId = null; 
+                appState.isAuthReady = true;
+                authStatusElement.innerHTML = `<span class="font-semibold text-red-500">Not Signed In</span>`;
+                renderLoginView(); // Render the dedicated login view
             }
         });
 
@@ -143,7 +152,7 @@ export async function fetchRecentDiscussions(appState) {
 export async function saveNote(noteText, appState) {
     const notesRef = getNotesDocRef(null, appState);
     if (!notesRef) {
-        console.error("Cannot save note: Missing DB/User/Discussion ID.");
+        console.error("Cannot save note: Missing DB/User/Discussion ID or User ID.");
         return;
     }
     

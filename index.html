@@ -7,6 +7,8 @@
     <title>Chit Chat AI Discussion App</title>
     <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Load FirebaseUI CSS -->
+    <link type="text/css" rel="stylesheet" href="https://www.gstatic.com/firebasejs/ui/6.0.1/firebase-ui-auth.css" />
     <!-- Load Google Fonts (Inter) -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
@@ -78,24 +80,22 @@
         </div>
 
         <div id="app-container" class="main-card bg-white p-6 md:p-8">
-            <!-- Content will be injected here (Genre Input, Areas, or Discussion) -->
+            <!-- Content will be injected here (Login, Genre Input, or Discussion) -->
         </div>
     </div>
 
     <!-- Core App Logic Modules -->
     <script type="module">
-        import { initializeFirebase, getNotesDocRef, saveNote, deleteDiscussion, setupNotesListener, fetchRecentDiscussions } from "./firebase_service.js";
-        import { callGeminiAPI, generateSuggestions, startDiscussion, sendChatMessage } from "./ai_service.js";
-        import { appState, renderApp, renderGenreInputView, renderDiscussionView, confirmAction, alertUser } from "./ui_state_manager.js";
+        import { initializeFirebase, deleteDiscussion } from "./firebase_service.js";
+        import { startDiscussion, generateSuggestions } from "./ai_service.js";
+        import { appState, renderApp, confirmAction, alertUser } from "./ui_state_manager.js";
 
-        // Expose modules globally for interaction from embedded HTML/DOM listeners
+        // Expose critical functions globally for event handlers in rendered views
         window.appState = appState;
         window.renderApp = renderApp;
         window.startDiscussion = startDiscussion;
         window.deleteDiscussion = deleteDiscussion;
         window.generateSuggestions = generateSuggestions;
-        window.saveNote = saveNote;
-        window.fetchRecentDiscussions = fetchRecentDiscussions;
         window.confirmAction = confirmAction;
         window.alertUser = alertUser;
 
