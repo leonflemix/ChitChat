@@ -1,27 +1,24 @@
 // Filename: ai_service.js (AI/Gemini API Communication)
 
 import { alertUser, renderApp } from "./ui_state_manager.js"; 
-import { saveNote, getNotesDocRef, setupNotesListener } from "./firebase_service.js"; // Corrected imports
+import { saveNote, getNotesDocRef, setupNotesListener } from "./firebase_service.js";
 import { getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-// The Gemini API Key is retrieved from the global window scope (set in index.html)
-const GEMINI_API_KEY = window.GEMINI_API_KEY;
+// NEW: No longer need to fetch GEMINI_API_KEY, as it is handled by the serverless proxy.
+// const GEMINI_API_KEY = window.GEMINI_API_KEY; // <-- REMOVED
 
 /**
- * Generic function to call the Gemini API with exponential backoff.
+ * Generic function to call the Vercel API Proxy with exponential backoff.
  */
 export async function callGeminiAPI(prompt, systemInstruction, generationConfig = {}, history = []) {
-    if (!GEMINI_API_KEY) {
-        throw new Error("API Key missing.");
-    }
-
+    // We now call our local Vercel API endpoint.
+    const VERCEL_API_URL = '/api/chat'; 
+    
     const loadingIndicator = document.getElementById('loading-indicator');
     const loadingText = document.getElementById('loading-text');
 
     loadingIndicator.classList.remove('hidden');
     loadingText.textContent = `Thinking about your request...`;
-
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${GEMINI_API_KEY}`;
 
     const contents = [
         ...history,
@@ -45,7 +42,8 @@ export async function callGeminiAPI(prompt, systemInstruction, generationConfig 
 
     for (let i = 0; i < maxRetries; i++) {
         try {
-            const fetchResponse = await fetch(apiUrl, {
+            // NEW: Call the local proxy endpoint
+            const fetchResponse = await fetch(VERCEL_API_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
@@ -60,9 +58,10 @@ export async function callGeminiAPI(prompt, systemInstruction, generationConfig 
             }
 
             if (!fetchResponse.ok) {
-                const errorMsg = await fetchResponse.text();
-                console.error("API Detailed Error:", errorMsg);
-                throw new Error(`API call failed with status: ${fetchResponse.status}`);
+                const errorData = await fetchResponse.json();
+                console.error("API Proxy Error:", errorData);
+                // Handle Vercel Serverless Function errors or API key issues reported by proxy
+                throw new Error(errorData.error || `API call failed with status: ${fetchResponse.status}`);
             }
 
             response = await fetchResponse.json();
@@ -74,7 +73,7 @@ export async function callGeminiAPI(prompt, systemInstruction, generationConfig 
                 delay *= 2;
                 continue;
             }
-            throw new Error(error.message || "Failed to connect to the Gemini API after multiple retries.");
+            throw new Error(error.message || "Failed to connect to the Vercel API Proxy after multiple retries.");
         }
     }
     loadingIndicator.classList.add('hidden');
@@ -175,10 +174,8 @@ export async function sendChatMessage(userMessage) {
  */
 export async function generateSuggestions(isNewSet = false) {
     const appState = window.appState;
-    if (!GEMINI_API_KEY) {
-        alertUser("Please provide a Gemini API Key to use AI features.");
-        return;
-    }
+    // We can rely on the proxy to fail if the Vercel env key is missing, 
+    // but the app should still work for signed-in users otherwise.
 
     try {
         document.getElementById('loading-text').textContent = isNewSet ? `Generating a fresh set of discussion points...` : `Preparing 10 discussion topics...`;
@@ -205,7 +202,7 @@ export async function generateSuggestions(isNewSet = false) {
         await saveNote(notesContent, appState);
         
     } catch (e) {
-        alertUser(`Error generating suggestions: ${e.message}`);
+        alertUser(`Error generating suggestions: ${e.message}. (Check Vercel API Key in environment variables.)`);
     }
     renderApp();
     const chatBox = document.getElementById('chat-box');
