@@ -361,6 +361,10 @@
                 console.error("Cannot save note: Missing DB/User/Discussion ID.");
                 return;
             }
+            
+            // Get status element once (FIX: Storing in a variable helps with null check)
+            const saveStatusEl = document.getElementById('save-status');
+
             try {
                 // Save chatHistory and noteContent
                 await setDoc(notesRef, {
@@ -372,8 +376,12 @@
                     hasSuggestions: appState.hasSuggestions, // Save suggestion status
                 }, { merge: true });
                 console.log("Discussion state and notes saved successfully.");
-                document.getElementById('save-status').textContent = 'Notes & Chat saved!';
-                setTimeout(() => document.getElementById('save-status').textContent = '', 2000);
+                
+                // FIX: Add null check before setting textContent
+                if (saveStatusEl) {
+                    saveStatusEl.textContent = 'Notes & Chat saved!';
+                    setTimeout(() => saveStatusEl.textContent = '', 2000);
+                }
 
                 // FIX: Trigger a single fetch update to refresh the main page discussion list
                 fetchRecentDiscussions(); 
@@ -381,7 +389,11 @@
                 console.error("Error adding/updating document: ", e);
                 // Inform user to check security rules
                 alertUser("Error saving notes. Please check your Firestore Security Rules and ensure Anonymous/Authenticated writes are allowed on your path.");
-                document.getElementById('save-status').textContent = 'Error saving notes.';
+                
+                // FIX: Add null check before setting error status
+                if (saveStatusEl) {
+                     saveStatusEl.textContent = 'Error saving notes.';
+                }
             }
         }
 
