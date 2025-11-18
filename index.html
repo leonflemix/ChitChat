@@ -86,7 +86,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         // Import Firestore primitives needed for querying recent docs
-        import { getFirestore, doc, onSnapshot, collection, query, setDoc, getDoc, getDocs, orderBy, limit, serverTimestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, onSnapshot, collection, query, setDoc, getDoc, getDocs, orderBy, limit, deleteDoc, serverTimestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // ====================================================================
         // CONFIGURATION AND GLOBALS
@@ -129,6 +129,7 @@
             discussionId: null,
             recentDiscussions: [],
             hasSuggestions: false, // tracks if the 10 suggestions have been generated
+            unsubscribeNotes: null,
         };
 
         // DOM Elements
@@ -244,7 +245,7 @@
 
                 // Sign in using the custom token or anonymously
                 if (initialAuthToken) {
-                    try { // <-- FIX: Added missing try block
+                    try { 
                         await signInWithCustomToken(appState.auth, initialAuthToken);
                     } catch (e) {
                          // If custom token fails, fall back to anonymous (likely due to sandbox environment restrictions)
@@ -268,7 +269,7 @@
                         appState.isAuthReady = true;
                         console.log("Firebase Auth Ready. User ID:", appState.userId);
                         
-                        // FIX: Call fetchRecentDiscussions here once after authentication is ready
+                        // Call fetchRecentDiscussions here once after authentication is ready
                         fetchRecentDiscussions(); 
                         
                         renderApp(); // Initial render after auth
@@ -279,7 +280,7 @@
                         authStatusElement.innerHTML = `<span class="font-semibold text-red-500">Anonymous ID:</span> ${appState.userId} (App: ${appId})`;
                         console.log("Firebase Auth Ready (Anonymous Fallback). User ID:", appState.userId);
                         
-                        // FIX: Call fetchRecentDiscussions here after anonymous auth is ready
+                        // Call fetchRecentDiscussions here after anonymous auth is ready
                         fetchRecentDiscussions();
                         
                         renderApp();
@@ -342,7 +343,7 @@
 
                 appState.recentDiscussions = discussions;
 
-                // FIX: Only re-render if we are currently on the genre input page 
+                // Only re-render if we are currently on the genre input page 
                 if (appState.currentView === 'genreInput') {
                     renderApp(); 
                 }
@@ -383,7 +384,7 @@
                     setTimeout(() => saveStatusEl.textContent = '', 2000);
                 }
 
-                // FIX: Trigger a single fetch update to refresh the main page discussion list
+                // Trigger a single fetch update to refresh the main page discussion list
                 fetchRecentDiscussions(); 
             } catch (e) {
                 console.error("Error adding/updating document: ", e);
@@ -396,6 +397,53 @@
                 }
             }
         }
+
+        /**
+         * Deletes the current discussion document from Firestore.
+         */
+        async function deleteDiscussion() {
+            const notesRef = getNotesDocRef();
+            if (!notesRef) {
+                alertUser("Cannot delete: No active discussion selected.");
+                return;
+            }
+            
+            // Custom confirmation dialog (since alert() is forbidden)
+            const confirmed = await confirmAction(`Are you sure you want to permanently delete the discussion on "${appState.currentArea}"? This cannot be undone.`);
+
+            if (!confirmed) {
+                return;
+            }
+
+            try {
+                // Stop listening to the document before deleting it
+                if (appState.unsubscribeNotes) {
+                    appState.unsubscribeNotes();
+                    appState.unsubscribeNotes = null;
+                }
+                
+                // Delete the document
+                await deleteDoc(notesRef);
+                
+                console.log("Discussion deleted successfully.");
+                alertUser(`Discussion on "${appState.currentArea}" has been deleted.`);
+
+                // Reset state and return to main screen
+                appState.currentView = 'genreInput';
+                appState.currentArea = '';
+                appState.discussionId = null;
+                appState.chatHistory = [];
+                appState.currentNotes = '';
+                appState.hasSuggestions = false;
+
+                // Update the recent list and render the main view
+                fetchRecentDiscussions();
+            } catch (e) {
+                console.error("Error deleting document:", e);
+                alertUser("Error deleting discussion. Check permissions.");
+            }
+        }
+
 
         /**
          * Sets up a real-time listener for the current discussion's notes.
@@ -566,7 +614,7 @@
         }
 
         // ====================================================================
-        // 5. VIEW RENDERING FUNCTIONS
+        // 5. VIEW RENDERING FUNCTIONS & UTILITIES
         // ====================================================================
 
         /**
@@ -586,6 +634,39 @@
                 if (alertEl) alertEl.remove();
             }, 5000);
         }
+        
+        /**
+         * Renders a custom confirmation modal. Returns true/false via a Promise.
+         */
+        function confirmAction(message) {
+            return new Promise(resolve => {
+                const modalHtml = `
+                    <div id="confirm-modal" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50 p-4">
+                        <div class="bg-white p-6 rounded-lg shadow-2xl max-w-sm w-full">
+                            <p class="text-lg font-semibold text-gray-800 mb-4">${message}</p>
+                            <div class="flex justify-end space-x-3">
+                                <button id="cancel-btn" class="px-4 py-2 bg-gray-300 text-gray-800 rounded-lg hover:bg-gray-400 transition">Cancel</button>
+                                <button id="confirm-btn" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition">Confirm Delete</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                document.body.insertAdjacentHTML('beforeend', modalHtml);
+                const modal = document.getElementById('confirm-modal');
+
+                document.getElementById('confirm-btn').onclick = () => {
+                    modal.remove();
+                    resolve(true);
+                };
+
+                document.getElementById('cancel-btn').onclick = () => {
+                    modal.remove();
+                    resolve(false);
+                };
+            });
+        }
+
 
         /**
          * Renders the Genre Input view, including recent discussions.
@@ -664,12 +745,18 @@
                     <!-- Discussion Panel (2/3 width) -->
                     <div class="lg:col-span-2 flex flex-col h-[600px] border border-gray-200 rounded-lg overflow-hidden">
                         <div class="p-4 bg-gray-50 border-b border-gray-200">
-                            <button id="back-to-genre" class="text-sm text-primary-color hover:underline mb-4 flex items-center">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                                </svg>
-                                Back to Topics
-                            </button>
+                            <div class="flex justify-between items-start mb-4">
+                                <button id="back-to-genre" class="text-sm text-primary-color hover:underline flex items-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                                    </svg>
+                                    Back to Topics
+                                </button>
+                                <button id="delete-discussion" class="text-xs px-3 py-1 bg-red-100 text-red-600 rounded-full hover:bg-red-200 transition font-semibold">
+                                    Delete Discussion
+                                </button>
+                            </div>
+
                             <h3 class="text-xl font-bold text-gray-800 truncate mt-1">Topic: ${appState.currentArea}</h3>
                             
                             <!-- Suggestions Button -->
@@ -748,6 +835,9 @@
                 if (appState.unsubscribeNotes) appState.unsubscribeNotes(); // Clean up listener
                 renderApp();
             });
+            
+            // New: Delete button listener
+            document.getElementById('delete-discussion')?.addEventListener('click', deleteDiscussion);
 
             // New: Suggestions button listeners
             document.getElementById('get-suggestions')?.addEventListener('click', () => {
