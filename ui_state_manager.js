@@ -106,6 +106,7 @@ export function renderLoginView() {
         return;
     }
     
+    // Initialize FirebaseUI instance only once
     let ui = firebaseui.auth.AuthUI.getInstance() || new firebaseui.auth.AuthUI(appState.auth);
     
     appContainer.innerHTML = `

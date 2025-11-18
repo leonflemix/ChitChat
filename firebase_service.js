@@ -1,7 +1,7 @@
 // Filename: firebase_service.js (Firebase Initialization and Data Layer)
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut, GoogleAuthProvider, EmailAuthProvider } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 import { getFirestore, doc, onSnapshot, collection, query, setDoc, getDoc, getDocs, limit, deleteDoc, serverTimestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { alertUser, confirmAction, renderApp, renderLoginView } from "./ui_state_manager.js"; // Import UI functions
 
@@ -27,11 +27,11 @@ const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial
 
 // --- Firebase UI Configuration (Exported for ui_state_manager.js) ---
 export const uiConfig = {
-    // Only allow Google and Email/Password Sign-in
+    // NOTE: We rely on global definitions of GoogleAuthProvider and EmailAuthProvider
     signInFlow: 'popup', 
     signInOptions: [
-        GoogleAuthProvider.PROVIDER_ID,
-        EmailAuthProvider.PROVIDER_ID,
+        firebase.auth.GoogleAuthProvider.PROVIDER_ID, // Use global reference
+        firebase.auth.EmailAuthProvider.PROVIDER_ID,   // Use global reference
     ],
     // Do not redirect after sign-in, manage state change locally
     callbacks: {
