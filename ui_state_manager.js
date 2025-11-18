@@ -1,6 +1,6 @@
 // Filename: ui_state_manager.js (State Management and View Rendering)
 
-import { fetchRecentDiscussions, saveNote, setupNotesListener, deleteDiscussion } from "./firebase_service.js";
+import { fetchRecentDiscussions, saveNote, deleteDiscussion } from "./firebase_service.js"; // setupNotesListener removed
 import { startDiscussion, sendChatMessage, generateSuggestions } from "./ai_service.js";
 
 // --- Application State ---

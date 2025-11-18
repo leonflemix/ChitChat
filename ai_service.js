@@ -1,7 +1,7 @@
 // Filename: ai_service.js (AI/Gemini API Communication)
 
-import { alertUser, renderApp, setupNotesListener } from "./ui_state_manager.js"; // Corrected import list
-import { saveNote, getNotesDocRef } from "./firebase_service.js"; // Corrected import path for saveNote
+import { alertUser, renderApp } from "./ui_state_manager.js"; // setupNotesListener removed
+import { saveNote, getNotesDocRef, setupNotesListener } from "./firebase_service.js"; // setupNotesListener added here
 import { getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 // The Gemini API Key is retrieved from the global window scope (set in index.html)
