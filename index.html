@@ -78,10 +78,9 @@
 
     <!-- Core App Logic Modules -->
     <script type="module">
-        import { initializeFirebase } from "./firebase_service.js";
-        import { deleteDiscussion } from "./firebase_service.js";
+        import { initializeFirebase, deleteDiscussion, saveNote } from "./firebase_service.js"; // FIX: saveNote is imported from firebase_service
         import { startDiscussion, generateSuggestions, sendChatMessage } from "./ai_service.js";
-        import { appState, renderApp, confirmAction, alertUser, saveNote } from "./ui_state_manager.js";
+        import { appState, renderApp, confirmAction, alertUser } from "./ui_state_manager.js"; // saveNote removed from here
         
         // Load essential Firebase modules via module imports
         import "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
@@ -102,8 +101,6 @@
         window.saveNote = saveNote;
         window.sendChatMessage = sendChatMessage;
 
-        // API Key Handler logic removed since the element is gone
-        
         // No client-side key needed since we use a Vercel proxy.
         window.GEMINI_API_KEY = "VercelManaged"; 
         appState.GEMINI_API_KEY = "VercelManaged"; 
