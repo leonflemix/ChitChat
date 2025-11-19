@@ -29,16 +29,28 @@ const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial
 
 // --- Firebase UI Configuration (Exported for ui_state_manager.js) ---
 export const uiConfig = {
-    // NOTE: These use constants exposed by the global Firebase SDK loaded in index.html
     signInFlow: 'popup', 
     signInOptions: [
-        // FIX: Reverting to string IDs here since the global SDK (V8) is loaded via <script> tags
+        // Using string IDs for compatibility with global FirebaseUI (V8)
         'google.com', 
-        'password',
+        {
+            provider: 'password', // Email/Password provider
+            // Ensure proper messages and flow are defined for existing users
+            signInMethod: 'emailLink', // Optional: Use email link sign in flow (passwordless)
+            // Or just allow sign in via password reset if email exists
+        }
     ],
-    // Do not redirect after sign-in, manage state change locally
+    // IMPORTANT: Specify the terms of service URL for password recovery visibility
+    tosUrl: 'https://example.com/terms',
+    privacyPolicyUrl: 'https://example.com/privacy',
+
+    // This callback is CRITICAL: it prevents FirebaseUI from redirecting or trying to manage the local app state after successful sign-in, deferring control back to our onAuthStateChanged listener.
     callbacks: {
         signInSuccessWithAuthResult: () => false, 
+        uiShown: function() {
+            // Hide loading indicator when Firebase UI is visible
+            document.getElementById('loading-indicator').classList.add('hidden');
+        },
     },
 };
 
@@ -64,6 +76,9 @@ export async function initializeFirebase(appState) {
         
         // Listener must be set up AFTER initialization
         onAuthStateChanged(appState.auth, (user) => {
+            // Manually hide loading once authentication has been checked
+            document.getElementById('loading-indicator').classList.add('hidden');
+            
             if (user && !user.isAnonymous) { // Check for authenticated, non-anonymous user
                 appState.userId = user.uid;
                 appState.isAuthReady = true;
@@ -88,6 +103,8 @@ export async function initializeFirebase(appState) {
 
     } catch (error) {
         console.error("Firebase Initialization Error:", error);
+        alertUser("Error initializing Firebase. Check your configuration and console logs.");
+        document.getElementById('loading-indicator').classList.add('hidden');
         authStatusElement.innerHTML = `<span class="font-bold text-red-500">Error:</span> Firebase failed to initialize. Check console.`;
     }
 }
