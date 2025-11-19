@@ -119,27 +119,12 @@ export function renderLoginView() {
     
     // Start the Firebase UI Widget
     ui.start('#firebaseui-auth-container', uiConfig);
-    
-    // Hide the API key setup area if user is asked to sign in
-    document.getElementById('api-key-setup').classList.add('hidden');
 }
 
 /**
  * Renders the Genre Input view, including recent discussions.
  */
 export function renderGenreInputView() {
-    const apiKeySetupElement = document.getElementById('api-key-setup');
-
-    // The logic below is technically redundant since the element is removed from index.html
-    // but kept here just in case the template is re-added elsewhere.
-    if (apiKeySetupElement) { 
-        if (appState.GEMINI_API_KEY) {
-            apiKeySetupElement.classList.add('hidden');
-        } else {
-            apiKeySetupElement.classList.remove('hidden');
-        }
-    }
-
     appContainer.innerHTML = `
         <div class="p-4 sm:p-6 text-center">
             <h2 class="text-2xl font-semibold mb-4 text-gray-700">What would you like to discuss?</h2>
@@ -150,7 +135,6 @@ export function renderGenreInputView() {
                     Start Chat
                 </button>
             </div>
-            <!-- API key warning removed from template since it's managed by Vercel -->
         </div>
 
         <section id="recent-discussions-section" class="mt-8 pt-6 border-t border-gray-200">

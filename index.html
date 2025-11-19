@@ -61,8 +61,6 @@
             <p id="auth-status" class="text-sm text-gray-500 mt-2"></p>
         </header>
 
-        <!-- The Gemini API Key Input section has been removed entirely -->
-
         <div id="loading-indicator" class="hidden text-center p-6 bg-yellow-100 text-yellow-800 rounded-lg main-card" role="status">
             <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-yellow-700 inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -76,21 +74,19 @@
         </div>
     </div>
 
-    <!-- Core App Logic Modules -->
+    <!-- FIX: Load foundational Firebase and FirebaseUI via standard script tags to define global 'firebase' -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/ui/4.8.1/firebase-ui-auth.js"></script>
+    
+    <!-- Core App Logic Modules (Using ES Modules for local files) -->
     <script type="module">
-        import { initializeFirebase, deleteDiscussion, saveNote } from "./firebase_service.js"; // FIX: saveNote is imported from firebase_service
+        // Import module functions
+        import { initializeFirebase, deleteDiscussion, saveNote } from "./firebase_service.js"; 
         import { startDiscussion, generateSuggestions, sendChatMessage } from "./ai_service.js";
-        import { appState, renderApp, confirmAction, alertUser } from "./ui_state_manager.js"; // saveNote removed from here
+        import { appState, renderApp, confirmAction, alertUser } from "./ui_state_manager.js";
         
-        // Load essential Firebase modules via module imports
-        import "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        
-        // Load FirebaseUI (Relies on the modules above defining firebase globals)
-        import "https://www.gstatic.com/firebasejs/ui/6.0.1/firebase-ui-auth.js"; 
-
-        // Expose critical functions and state globally for event handlers in rendered views
+        // Expose critical functions and state globally for event handlers and module access
         window.appState = appState;
         window.renderApp = renderApp;
         window.startDiscussion = startDiscussion;

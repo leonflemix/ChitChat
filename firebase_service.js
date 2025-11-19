@@ -1,7 +1,8 @@
 // Filename: firebase_service.js (Firebase Initialization and Data Layer)
 
+// NOTE: Core Firebase SDK is loaded via <script> tags in index.html to support FirebaseUI.
+// We must import modular SDKs for Firestore/modular functions here.
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-// FIX: Import the Provider classes directly from the auth module
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut, GoogleAuthProvider, EmailAuthProvider } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 import { getFirestore, doc, onSnapshot, collection, query, setDoc, getDoc, getDocs, limit, deleteDoc, serverTimestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { alertUser, confirmAction, renderApp, renderLoginView } from "./ui_state_manager.js"; // Import UI functions
@@ -28,11 +29,12 @@ const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial
 
 // --- Firebase UI Configuration (Exported for ui_state_manager.js) ---
 export const uiConfig = {
-    // FIX: Use the imported Provider constructors directly
+    // NOTE: These use constants exposed by the global Firebase SDK loaded in index.html
     signInFlow: 'popup', 
     signInOptions: [
-        GoogleAuthProvider.PROVIDER_ID, 
-        EmailAuthProvider.PROVIDER_ID,
+        // FIX: Reverting to string IDs here since the global SDK (V8) is loaded via <script> tags
+        'google.com', 
+        'password',
     ],
     // Do not redirect after sign-in, manage state change locally
     callbacks: {
@@ -46,6 +48,7 @@ export const uiConfig = {
 export async function initializeFirebase(appState) {
     const authStatusElement = document.getElementById('auth-status');
     try {
+        // Initialize modular app, but auth/firestore globals rely on the V8 script tags
         const app = initializeApp(firebaseConfig);
         appState.db = getFirestore(app);
         appState.auth = getAuth(app);
@@ -61,26 +64,25 @@ export async function initializeFirebase(appState) {
         
         // Listener must be set up AFTER initialization
         onAuthStateChanged(appState.auth, (user) => {
-            if (user && !user.isAnonymous) { // NEW: Check for non-anonymous user
+            if (user && !user.isAnonymous) { // Check for authenticated, non-anonymous user
                 appState.userId = user.uid;
                 appState.isAuthReady = true;
+                appState.currentView = 'genreInput'; // Change view after successful login
                 authStatusElement.innerHTML = `<span class="font-semibold">User:</span> ${user.email || user.displayName || user.uid} <button id="signout-btn" class="text-indigo-400 hover:text-indigo-600 ml-2">Sign Out</button>`;
                 
-                // Fetch recent discussions and render the app view
                 fetchRecentDiscussions(appState); 
                 renderApp(); 
                 
-                // Set up sign out listener
-                document.getElementById('signout-btn').addEventListener('click', async () => {
+                document.getElementById('signout-btn')?.addEventListener('click', async () => {
                     await signOut(appState.auth);
-                    // State change will trigger onAuthStateChanged again
                 });
             } else {
-                // If no user or anonymous user, show the login view
+                // Not signed in or is anonymous, show the login view
                 appState.userId = null; 
                 appState.isAuthReady = true;
+                appState.currentView = 'login'; // Ensure view is 'login'
                 authStatusElement.innerHTML = `<span class="font-semibold text-red-500">Not Signed In</span>`;
-                renderLoginView(); // Render the dedicated login view
+                renderApp(); // Render the dedicated login view
             }
         });
 
@@ -115,14 +117,13 @@ export function getNotesDocRef(discussionId, appState) {
  * Retrieves the last 5 saved discussions.
  */
 export async function fetchRecentDiscussions(appState) {
-    if (!appState.isAuthReady || !appState.userId || appState.db === null) return;
+    if (!appState.isAuthReady || !appState.userId || appState.db === null || appState.currentView !== 'genreInput') return;
 
     const colRef = getNotesCollectionRef(appState);
     if (!colRef) return;
 
     try {
         // Query the collection, limit results
-        // IMPORTANT: Relying on client-side sorting here to avoid Firestore index errors on orderBy(field)
         const q = query(colRef, limit(5)); 
         const snapshot = await getDocs(q);
 
@@ -177,10 +178,13 @@ export async function saveNote(noteText, appState) {
             setTimeout(() => saveStatusEl.textContent = '', 2000);
         }
 
-        fetchRecentDiscussions(appState); 
+        // Only fetch and render updates if the user is not currently deleting something or navigating
+        if (appState.currentView !== 'login') {
+            fetchRecentDiscussions(appState); 
+        }
     } catch (e) {
         console.error("Error adding/updating document: ", e);
-        alertUser("Error saving notes. Please check your Firestore Security Rules and ensure Anonymous/Authenticated writes are allowed on your path.");
+        alertUser("Error saving notes. Please check your Firestore Security Rules and ensure writes are allowed on your path.");
         
         if (saveStatusEl) {
              saveStatusEl.textContent = 'Error saving notes.';
