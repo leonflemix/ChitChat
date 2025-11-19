@@ -4,8 +4,7 @@ import { alertUser, renderApp } from "./ui_state_manager.js";
 import { saveNote, getNotesDocRef, setupNotesListener } from "./firebase_service.js";
 import { getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-// NEW: No longer need to fetch GEMINI_API_KEY, as it is handled by the serverless proxy.
-// const GEMINI_API_KEY = window.GEMINI_API_KEY; // <-- REMOVED
+// GEMINI_API_KEY is now managed by the proxy on Vercel or injected into window.GEMINI_API_KEY
 
 /**
  * Generic function to call the Vercel API Proxy with exponential backoff.

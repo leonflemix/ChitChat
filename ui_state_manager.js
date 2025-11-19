@@ -130,11 +130,14 @@ export function renderLoginView() {
 export function renderGenreInputView() {
     const apiKeySetupElement = document.getElementById('api-key-setup');
 
-    // Hide/Show API setup based on key presence
-    if (appState.GEMINI_API_KEY) {
-        apiKeySetupElement.classList.add('hidden');
-    } else {
-        apiKeySetupElement.classList.remove('hidden');
+    // The logic below is technically redundant since the element is removed from index.html
+    // but kept here just in case the template is re-added elsewhere.
+    if (apiKeySetupElement) { 
+        if (appState.GEMINI_API_KEY) {
+            apiKeySetupElement.classList.add('hidden');
+        } else {
+            apiKeySetupElement.classList.remove('hidden');
+        }
     }
 
     appContainer.innerHTML = `
@@ -143,11 +146,11 @@ export function renderGenreInputView() {
             <p class="mb-6 text-gray-500">Enter a topic or genre (e.g., 'Space Exploration', '1990s Music', 'Greek Mythology').</p>
             <div class="flex flex-col sm:flex-row gap-4 max-w-lg mx-auto">
                 <input type="text" id="genre-input" placeholder="Enter genre here..." class="flex-grow p-3 border border-gray-300 rounded-lg focus:ring-primary-color focus:border-primary-color" required>
-                <button id="submit-genre" class="btn-primary text-white p-3 rounded-lg font-semibold shadow-md hover:shadow-lg transition" ${!appState.GEMINI_API_KEY ? 'disabled' : ''}>
+                <button id="submit-genre" class="btn-primary text-white p-3 rounded-lg font-semibold shadow-md hover:shadow-lg transition">
                     Start Chat
                 </button>
             </div>
-            ${!appState.GEMINI_API_KEY ? '<p class="text-sm text-red-500 mt-3">Please save a Gemini API Key above to enable generation.</p>' : ''}
+            <!-- API key warning removed from template since it's managed by Vercel -->
         </div>
 
         <section id="recent-discussions-section" class="mt-8 pt-6 border-t border-gray-200">
