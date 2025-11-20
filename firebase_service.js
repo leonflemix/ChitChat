@@ -31,13 +31,13 @@ const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial
 export const uiConfig = {
     signInFlow: 'popup', 
     signInOptions: [
-        // Using string IDs for compatibility with global FirebaseUI (V8)
+        // 1. Google Sign-in
         'google.com', 
+        // 2. Email/Password Sign-in (Explicitly configured)
         {
-            provider: 'password', // Email/Password provider
-            // Ensure proper messages and flow are defined for existing users
-            signInMethod: 'emailLink', // Optional: Use email link sign in flow (passwordless)
-            // Or just allow sign in via password reset if email exists
+            provider: 'password', 
+            // Ensures the UI widget shows the correct options, including password reset
+            requireDisplayName: true, // Optional: Require the user to enter a display name on sign up
         }
     ],
     // IMPORTANT: Specify the terms of service URL for password recovery visibility
