@@ -17,7 +17,7 @@ export const appState = {
     recentDiscussions: [],
     hasSuggestions: false,
     unsubscribeNotes: null,
-    GEMINI_API_KEY: localStorage.getItem('geminiApiKey') || "",
+    GEMINI_API_KEY: "VercelManaged", // Default since we use proxy
 };
 
 const appContainer = document.getElementById('app-container');
@@ -110,9 +110,8 @@ export function renderLoginView() {
         </div>
     `;
     
-    // Hide API key setup on login screen to reduce clutter
-    document.getElementById('api-key-setup').classList.add('hidden');
-
+    // REMOVED: Code attempting to hide 'api-key-setup'
+    
     const emailInput = document.getElementById('auth-email');
     const passwordInput = document.getElementById('auth-password');
 
@@ -138,13 +137,7 @@ export function renderLoginView() {
 }
 
 export function renderGenreInputView() {
-    // Show/Hide API setup based on key presence
-    const apiKeySetupElement = document.getElementById('api-key-setup');
-    if (appState.GEMINI_API_KEY) {
-        apiKeySetupElement.classList.add('hidden');
-    } else {
-        apiKeySetupElement.classList.remove('hidden');
-    }
+    // REMOVED: Code attempting to access 'api-key-setup'
 
     appContainer.innerHTML = `
         <div class="p-4 sm:p-6 text-center">
