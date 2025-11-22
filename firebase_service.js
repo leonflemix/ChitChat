@@ -14,7 +14,7 @@ import { getFirestore, doc, onSnapshot, collection, query, setDoc, getDoc, getDo
 import { alertUser, renderApp, renderLoginView } from "./ui_state_manager.js";
 
 // Set Firebase Log Level
-setLogLevel('debug');
+//setLogLevel('debug');
 
 // --- Firebase Configuration ---
 
