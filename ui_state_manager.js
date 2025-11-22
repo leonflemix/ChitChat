@@ -1,6 +1,7 @@
 // Filename: ui_state_manager.js (State Management and View Rendering)
 
-import { fetchRecentDiscussions, saveNote, deleteDiscussion, uiConfig } from "./firebase_service.js"; 
+// FIX: Removed 'uiConfig' from the import list as it is no longer exported or used
+import { fetchRecentDiscussions, saveNote, deleteDiscussion } from "./firebase_service.js"; 
 import { startDiscussion, sendChatMessage, generateSuggestions } from "./ai_service.js";
 
 // --- Application State ---
@@ -128,7 +129,8 @@ export function renderLoginView() {
     `;
     
     // Hide API key setup on login screen to reduce clutter
-    document.getElementById('api-key-setup').classList.add('hidden');
+    const apiKeySetup = document.getElementById('api-key-setup');
+    if (apiKeySetup) apiKeySetup.classList.add('hidden');
 
     const emailInput = document.getElementById('auth-email');
     const passwordInput = document.getElementById('auth-password');
@@ -157,10 +159,12 @@ export function renderLoginView() {
 export function renderGenreInputView() {
     // Show/Hide API setup based on key presence
     const apiKeySetupElement = document.getElementById('api-key-setup');
-    if (appState.GEMINI_API_KEY) {
-        apiKeySetupElement.classList.add('hidden');
-    } else {
-        apiKeySetupElement.classList.remove('hidden');
+    if (apiKeySetupElement) {
+        if (appState.GEMINI_API_KEY) {
+            apiKeySetupElement.classList.add('hidden');
+        } else {
+            apiKeySetupElement.classList.remove('hidden');
+        }
     }
 
     appContainer.innerHTML = `
