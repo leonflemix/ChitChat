@@ -1,11 +1,17 @@
-// Filename: firebase_service.js (Firebase Initialization and Data Layer)
+// Filename: firebase_service.js (Firebase Initialization, Auth, and Data Layer)
 
-// NOTE: Core Firebase SDK is loaded via <script> tags in index.html to support FirebaseUI.
-// We must import modular SDKs for Firestore/modular functions here.
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut, GoogleAuthProvider, EmailAuthProvider } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { 
+    getAuth, 
+    signInAnonymously, 
+    signInWithCustomToken, 
+    onAuthStateChanged, 
+    signOut, 
+    signInWithEmailAndPassword, 
+    createUserWithEmailAndPassword 
+} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 import { getFirestore, doc, onSnapshot, collection, query, setDoc, getDoc, getDocs, limit, deleteDoc, serverTimestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-import { alertUser, confirmAction, renderApp, renderLoginView } from "./ui_state_manager.js"; // Import UI functions
+import { alertUser, renderApp, renderLoginView } from "./ui_state_manager.js";
 
 // Set Firebase Log Level
 setLogLevel('debug');
@@ -14,7 +20,6 @@ setLogLevel('debug');
 
 export const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
-// The user's provided configuration is used as a fallback if the environment variable is not present.
 export const defaultFirebaseConfig = {
     apiKey: "AIzaSyA4ynU2vU6pflZ5wRhD-FxDTh3_cQGiePM",
     authDomain: "chitchat-9264b.firebaseapp.com",
@@ -27,38 +32,6 @@ export const defaultFirebaseConfig = {
 const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : defaultFirebaseConfig;
 const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
-// --- Firebase UI Configuration (Exported for ui_state_manager.js) ---
-export const uiConfig = {
-    signInFlow: 'popup', 
-    signInOptions: [
-        // 1. Google Sign-in
-        'google.com', 
-        // 2. Email/Password Sign-in (Explicitly configured)
-        {
-            provider: 'password', 
-            // Ensures the UI widget shows the correct options, including password reset
-            requireDisplayName: true, // Optional: Require the user to enter a display name on sign up
-        }
-    ],
-    // IMPORTANT: Specify the terms of service URL for password recovery visibility
-    tosUrl: 'https://example.com/terms',
-    privacyPolicyUrl: 'https://example.com/privacy',
-
-    // This callback is CRITICAL: it prevents FirebaseUI from crashing the app's module structure
-    // by using a simple full page reload after successful auth.
-    callbacks: {
-        signInSuccessWithAuthResult: () => {
-            // Force a reload to trigger the onAuthStateChanged listener and fully initialize the app
-            // This is the most reliable way to handshake between FirebaseUI's global V8 code and our modular code
-            window.location.reload(); 
-            return false; // Prevents default FirebaseUI redirection behavior
-        }, 
-        uiShown: function() {
-            // Hide loading indicator when Firebase UI is visible
-            document.getElementById('loading-indicator').classList.add('hidden');
-        },
-    },
-};
 
 /**
  * Initializes Firebase, sets up authentication, and updates the application state.
@@ -66,12 +39,11 @@ export const uiConfig = {
 export async function initializeFirebase(appState) {
     const authStatusElement = document.getElementById('auth-status');
     try {
-        // Initialize modular app, but auth/firestore globals rely on the V8 script tags
         const app = initializeApp(firebaseConfig);
         appState.db = getFirestore(app);
         appState.auth = getAuth(app);
 
-        // Attempt anonymous or custom token sign-in if available (Legacy/Canvas requirement)
+        // Legacy/Canvas auth support
         if (initialAuthToken) {
             try { 
                 await signInWithCustomToken(appState.auth, initialAuthToken);
@@ -80,77 +52,132 @@ export async function initializeFirebase(appState) {
             }
         }
         
-        // Listener must be set up AFTER initialization
+        // Auth Listener
         onAuthStateChanged(appState.auth, (user) => {
-            // Manually hide loading once authentication has been checked
             document.getElementById('loading-indicator').classList.add('hidden');
             
-            if (user && !user.isAnonymous) { // Check for authenticated, non-anonymous user
+            if (user) {
                 appState.userId = user.uid;
                 appState.isAuthReady = true;
-                appState.currentView = 'genreInput'; // Change view after successful login
-                authStatusElement.innerHTML = `<span class="font-semibold">User:</span> ${user.email || user.displayName || user.uid} <button id="signout-btn" class="text-indigo-400 hover:text-indigo-600 ml-2">Sign Out</button>`;
+                
+                // Only change view if we were on the login screen (avoids resetting view on page refresh)
+                if (appState.currentView === 'login') {
+                    appState.currentView = 'genreInput';
+                }
+                
+                authStatusElement.innerHTML = `
+                    <span class="font-semibold text-gray-700">${user.email || 'Anonymous User'}</span> 
+                    <button onclick="window.handleLogout()" class="text-xs bg-gray-200 hover:bg-gray-300 px-2 py-1 rounded text-gray-700 ml-2 transition">Sign Out</button>
+                `;
                 
                 fetchRecentDiscussions(appState); 
                 renderApp(); 
-                
-                document.getElementById('signout-btn')?.addEventListener('click', async () => {
-                    await signOut(appState.auth);
-                });
             } else {
-                // Not signed in or is anonymous, show the login view
                 appState.userId = null; 
                 appState.isAuthReady = true;
-                appState.currentView = 'login'; // Ensure view is 'login'
-                authStatusElement.innerHTML = `<span class="font-semibold text-red-500">Not Signed In</span>`;
-                renderApp(); // Render the dedicated login view
+                appState.currentView = 'login';
+                authStatusElement.innerHTML = `<span class="text-xs text-gray-400">Not Signed In</span>`;
+                renderApp(); 
             }
         });
 
     } catch (error) {
         console.error("Firebase Initialization Error:", error);
-        alertUser("Error initializing Firebase. Check your configuration and console logs.");
+        alertUser("Error initializing Firebase.");
         document.getElementById('loading-indicator').classList.add('hidden');
-        authStatusElement.innerHTML = `<span class="font-bold text-red-500">Error:</span> Firebase failed to initialize. Check console.`;
     }
 }
 
+// --- Custom Auth Handlers ---
+
+export async function handleLogin(email, password) {
+    try {
+        const appState = window.appState; // Access state
+        if(!appState.auth) return;
+        
+        document.getElementById('loading-indicator').classList.remove('hidden');
+        document.getElementById('loading-text').textContent = "Signing in...";
+        
+        await signInWithEmailAndPassword(appState.auth, email, password);
+        // onAuthStateChanged will handle the redirect
+        
+    } catch (error) {
+        document.getElementById('loading-indicator').classList.add('hidden');
+        console.error("Login Error:", error);
+        
+        let msg = "Failed to sign in.";
+        if (error.code === 'auth/invalid-credential') msg = "Invalid email or password.";
+        if (error.code === 'auth/user-not-found') msg = "No account found with this email.";
+        if (error.code === 'auth/wrong-password') msg = "Incorrect password.";
+        if (error.code === 'auth/too-many-requests') msg = "Too many attempts. Try again later.";
+        if (error.code === 'auth/operation-not-allowed') msg = "Email/Password sign-in is not enabled in Firebase Console.";
+        
+        alertUser(msg);
+    }
+}
+
+export async function handleRegister(email, password) {
+    try {
+        const appState = window.appState;
+        if(!appState.auth) return;
+
+        document.getElementById('loading-indicator').classList.remove('hidden');
+        document.getElementById('loading-text').textContent = "Creating account...";
+
+        await createUserWithEmailAndPassword(appState.auth, email, password);
+        // onAuthStateChanged will handle the redirect
+
+    } catch (error) {
+        document.getElementById('loading-indicator').classList.add('hidden');
+        console.error("Register Error:", error);
+
+        let msg = "Failed to create account.";
+        if (error.code === 'auth/email-already-in-use') msg = "This email is already registered. Try signing in.";
+        if (error.code === 'auth/weak-password') msg = "Password should be at least 6 characters.";
+        if (error.code === 'auth/invalid-email') msg = "Please enter a valid email address.";
+        if (error.code === 'auth/operation-not-allowed') msg = "Email/Password sign-in is not enabled in Firebase Console.";
+
+        alertUser(msg);
+    }
+}
+
+export async function handleLogout() {
+    const appState = window.appState;
+    if(appState.auth) {
+        await signOut(appState.auth);
+        appState.chatHistory = [];
+        appState.currentNotes = '';
+        appState.recentDiscussions = [];
+        // onAuthStateChanged will handle the view update
+    }
+}
+
+
 // --- Firestore Helpers ---
 
-/**
- * Helper to get the Firestore discussion collection reference.
- */
 function getNotesCollectionRef(appState) {
     if (!appState.db || !appState.userId) return null;
-    // Private path: /artifacts/{appId}/users/{userId}/notes_collection
     const path = `artifacts/${appId}/users/${appState.userId}/notes_collection`;
     return collection(appState.db, path);
 }
 
-/**
- * Helper to get the Firestore discussion document reference.
- */
 export function getNotesDocRef(discussionId, appState) {
     if (!discussionId) discussionId = appState.discussionId;
     const colRef = getNotesCollectionRef(appState);
     return colRef ? doc(colRef, discussionId) : null;
 }
 
-/**
- * Retrieves the last 5 saved discussions.
- */
 export async function fetchRecentDiscussions(appState) {
-    if (!appState.isAuthReady || !appState.userId || appState.db === null || appState.currentView !== 'genreInput') return;
+    if (!appState.isAuthReady || !appState.userId || appState.db === null) return;
 
     const colRef = getNotesCollectionRef(appState);
     if (!colRef) return;
 
     try {
-        // Query the collection, limit results
-        const q = query(colRef, limit(5)); 
+        // Using client-side sorting to avoid index requirements
+        const q = query(colRef, limit(10)); // Fetch a few more to ensure we get top 5 sorted
         const snapshot = await getDocs(q);
 
-        // Sort client-side by lastUpdated (descending)
         const discussions = snapshot.docs.map(doc => ({
             id: doc.id,
             ...doc.data()
@@ -162,7 +189,7 @@ export async function fetchRecentDiscussions(appState) {
             return dateB - dateA; 
         });
 
-        appState.recentDiscussions = discussions;
+        appState.recentDiscussions = discussions.slice(0, 5);
 
         if (appState.currentView === 'genreInput') {
             renderApp(); 
@@ -172,13 +199,10 @@ export async function fetchRecentDiscussions(appState) {
     }
 }
 
-/**
- * Saves the current notes content AND the entire chat history to Firestore.
- */
 export async function saveNote(noteText, appState) {
     const notesRef = getNotesDocRef(null, appState);
     if (!notesRef) {
-        console.error("Cannot save note: Missing DB/User/Discussion ID or User ID.");
+        console.error("Cannot save note: Missing IDs.");
         return;
     }
     
@@ -194,42 +218,33 @@ export async function saveNote(noteText, appState) {
             hasSuggestions: appState.hasSuggestions, 
         }, { merge: true });
         
-        console.log("Discussion state and notes saved successfully.");
+        console.log("Saved.");
         
         if (saveStatusEl) {
-            saveStatusEl.textContent = 'Notes & Chat saved!';
+            saveStatusEl.textContent = 'Saved!';
             setTimeout(() => saveStatusEl.textContent = '', 2000);
         }
 
-        // Only fetch and render updates if the user is not currently deleting something or navigating
         if (appState.currentView !== 'login') {
             fetchRecentDiscussions(appState); 
         }
     } catch (e) {
         console.error("Error adding/updating document: ", e);
-        alertUser("Error saving notes. Please check your Firestore Security Rules and ensure writes are allowed on your path.");
-        
-        if (saveStatusEl) {
-             saveStatusEl.textContent = 'Error saving notes.';
-        }
+        alertUser("Error saving. Check console.");
+        if (saveStatusEl) saveStatusEl.textContent = 'Error saving.';
     }
 }
 
-/**
- * Deletes the current discussion document from Firestore.
- */
 export async function deleteDiscussion(appState) {
     const notesRef = getNotesDocRef(null, appState);
     if (!notesRef) {
-        alertUser("Cannot delete: No active discussion selected.");
+        alertUser("No active discussion to delete.");
         return;
     }
     
-    const confirmed = await confirmAction(`Are you sure you want to permanently delete the discussion on "${appState.currentArea}"? This cannot be undone.`);
+    const confirmed = await confirmAction(`Delete discussion on "${appState.currentArea}"? This cannot be undone.`);
 
-    if (!confirmed) {
-        return;
-    }
+    if (!confirmed) return;
 
     try {
         if (appState.unsubscribeNotes) {
@@ -239,10 +254,8 @@ export async function deleteDiscussion(appState) {
         
         await deleteDoc(notesRef);
         
-        console.log("Discussion deleted successfully.");
-        alertUser(`Discussion on "${appState.currentArea}" has been deleted.`);
+        alertUser("Discussion deleted.");
 
-        // Reset state and return to main screen
         appState.currentView = 'genreInput';
         appState.currentArea = '';
         appState.discussionId = null;
@@ -251,16 +264,13 @@ export async function deleteDiscussion(appState) {
         appState.hasSuggestions = false;
 
         fetchRecentDiscussions(appState);
+        renderApp();
     } catch (e) {
-        console.error("Error deleting document:", e);
-        alertUser("Error deleting discussion. Check permissions.");
+        console.error("Error deleting:", e);
+        alertUser("Error deleting discussion.");
     }
 }
 
-
-/**
- * Sets up a real-time listener for the current discussion's notes.
- */
 export function setupNotesListener(appState) {
     const notesRef = getNotesDocRef(null, appState);
     if (!notesRef) return;
@@ -273,14 +283,12 @@ export function setupNotesListener(appState) {
         const notesTextarea = document.getElementById('notes-textarea');
         if (docSnap.exists() && notesTextarea) {
             appState.currentNotes = docSnap.data().noteContent || '';
-            notesTextarea.value = appState.currentNotes;
-            console.log("Notes updated from Firestore.");
+            // Only update if user isn't actively typing (basic check) to prevent overwriting
+            if (document.activeElement !== notesTextarea) {
+                notesTextarea.value = appState.currentNotes;
+            }
         } else if (notesTextarea) {
             appState.currentNotes = '';
-            notesTextarea.value = '';
-            console.log("Notes document not found, resetting notes.");
         }
-    }, (error) => {
-        console.error("Error listening to notes:", error);
     });
 }
