@@ -44,9 +44,15 @@ export const uiConfig = {
     tosUrl: 'https://example.com/terms',
     privacyPolicyUrl: 'https://example.com/privacy',
 
-    // This callback is CRITICAL: it prevents FirebaseUI from redirecting or trying to manage the local app state after successful sign-in, deferring control back to our onAuthStateChanged listener.
+    // This callback is CRITICAL: it prevents FirebaseUI from crashing the app's module structure
+    // by using a simple full page reload after successful auth.
     callbacks: {
-        signInSuccessWithAuthResult: () => false, 
+        signInSuccessWithAuthResult: () => {
+            // Force a reload to trigger the onAuthStateChanged listener and fully initialize the app
+            // This is the most reliable way to handshake between FirebaseUI's global V8 code and our modular code
+            window.location.reload(); 
+            return false; // Prevents default FirebaseUI redirection behavior
+        }, 
         uiShown: function() {
             // Hide loading indicator when Firebase UI is visible
             document.getElementById('loading-indicator').classList.add('hidden');
