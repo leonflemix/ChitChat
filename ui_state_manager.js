@@ -1,14 +1,15 @@
 // Filename: ui_state_manager.js (State Management and View Rendering)
 
-import { fetchRecentDiscussions, saveNote, deleteDiscussion } from "./firebase_service.js"; 
+import { fetchRecentDiscussions, saveNote, deleteDiscussion, uiConfig } from "./firebase_service.js"; 
 import { startDiscussion, sendChatMessage, generateSuggestions } from "./ai_service.js";
 
+// --- Application State ---
 export const appState = {
     db: null,
     auth: null,
     userId: null,
     isAuthReady: false,
-    currentView: 'login',
+    currentView: 'login', // Default starting view is now 'login'
     currentGenre: '',
     currentArea: '',
     chatHistory: [],
@@ -17,11 +18,16 @@ export const appState = {
     recentDiscussions: [],
     hasSuggestions: false,
     unsubscribeNotes: null,
-    GEMINI_API_KEY: "VercelManaged", // Default since we use proxy
+    GEMINI_API_KEY: localStorage.getItem('geminiApiKey') || "",
 };
 
+// --- DOM Manipulation Helpers ---
 const appContainer = document.getElementById('app-container');
+const loadingIndicator = document.getElementById('loading-indicator');
 
+/**
+ * Renders a generic error or info message to the user.
+ */
 export function alertUser(message) {
     console.error(message);
     const alertHtml = `
@@ -36,6 +42,9 @@ export function alertUser(message) {
     }, 5000);
 }
 
+/**
+ * Renders a custom confirmation modal. Returns true/false via a Promise.
+ */
 export function confirmAction(message) {
     return new Promise(resolve => {
         const modalHtml = `
@@ -65,13 +74,21 @@ export function confirmAction(message) {
     });
 }
 
+
+// Function to handle basic Markdown to HTML conversion for display
 function markdownToHtml(text, role) {
     let html = text;
+    
+    // Add AI prefix if it's a model response
     if (role === 'model') {
         html = `<span class="font-bold">AI:</span> ${html}`;
     }
+
+    // Simple bold
     html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    // Simple italic
     html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+    // Line breaks
     html = html.replace(/\n/g, '<br>');
     return html;
 }
@@ -110,8 +127,9 @@ export function renderLoginView() {
         </div>
     `;
     
-    // REMOVED: Code attempting to hide 'api-key-setup'
-    
+    // Hide API key setup on login screen to reduce clutter
+    document.getElementById('api-key-setup').classList.add('hidden');
+
     const emailInput = document.getElementById('auth-email');
     const passwordInput = document.getElementById('auth-password');
 
@@ -137,7 +155,13 @@ export function renderLoginView() {
 }
 
 export function renderGenreInputView() {
-    // REMOVED: Code attempting to access 'api-key-setup'
+    // Show/Hide API setup based on key presence
+    const apiKeySetupElement = document.getElementById('api-key-setup');
+    if (appState.GEMINI_API_KEY) {
+        apiKeySetupElement.classList.add('hidden');
+    } else {
+        apiKeySetupElement.classList.remove('hidden');
+    }
 
     appContainer.innerHTML = `
         <div class="p-4 sm:p-6 text-center">
@@ -265,7 +289,10 @@ export function renderDiscussionView() {
         renderApp();
     });
     
-    document.getElementById('delete-discussion')?.addEventListener('click', deleteDiscussion);
+    // FIX: Pass appState to deleteDiscussion, otherwise it receives the click Event object
+    document.getElementById('delete-discussion')?.addEventListener('click', () => {
+        deleteDiscussion(appState);
+    });
 
     document.getElementById('get-suggestions')?.addEventListener('click', () => generateSuggestions(false));
     document.getElementById('get-new-suggestions')?.addEventListener('click', () => generateSuggestions(true));
